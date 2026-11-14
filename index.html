@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Only the app's own script files run: no script written into the page,
+         as an onerror in a note's or the AI's HTML or a javascript: link,
+         can reach the Go side, which starts programs. -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'" />
+    <title>工具箱</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

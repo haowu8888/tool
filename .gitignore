@@ -1,0 +1,9 @@
+node_modules/
+/dist/
+/build/
+/.mygo/
+mygo_windows_*.syso
+/.dev/*.png
+/.dev/*.txt
+/.dev/js/
+/.dev/*.log
