@@ -32,6 +32,7 @@ func main() {
 	shot := &Shot{settings: settings}
 	clips := &Clips{settings: settings}
 	services := &Services{}
+	flow := &Flow{}
 	mygo.Bind(virtual)
 	mygo.Bind(launcher)
 	mygo.Bind(notes)
@@ -44,6 +45,7 @@ func main() {
 	mygo.Bind(shot)
 	mygo.Bind(clips)
 	mygo.Bind(services)
+	mygo.Bind(flow)
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()
@@ -80,10 +82,23 @@ func main() {
 		})
 		// The monitor's page watches only while the window can be seen.
 		monitor.setHidden(hidden)
-		win.OnHide(func() { monitor.setHidden(true) })
-		win.OnMinimize(func() { monitor.setHidden(true) })
-		win.OnShow(func() { monitor.setHidden(false) })
-		win.OnRestore(func() { monitor.setHidden(false) })
+		flow.setHidden(hidden)
+		win.OnHide(func() {
+			monitor.setHidden(true)
+			flow.setHidden(true)
+		})
+		win.OnMinimize(func() {
+			monitor.setHidden(true)
+			flow.setHidden(true)
+		})
+		win.OnShow(func() {
+			monitor.setHidden(false)
+			flow.setHidden(false)
+		})
+		win.OnRestore(func() {
+			monitor.setHidden(false)
+			flow.setHidden(false)
+		})
 		// Closing hides the window to the tray, so that the shortcuts and
 		// the tray keep working, unless the user chose to quit. The tray's
 		// Quit, which closes every window too, ends the app.
@@ -179,6 +194,10 @@ func main() {
 		services.onAlerts = reminder.services
 		services.open = func() { showTool("services") }
 		go services.watch(mygo.App.WasOpenedAtLogin())
+		// Flow's pipelines; a run that fails pops up in the bubble too.
+		flow.onAlerts = reminder.flow
+		flow.open = func() { showTool("flow") }
+		go flow.watch()
 		widget.onMove = func() { reminder.place() }
 		overlay.open = func() { showTool("monitor") }
 		go notes.watch()
@@ -197,6 +216,7 @@ func main() {
 				{Label: "剪贴板历史", Click: func(*mygo.MenuItem, *mygo.Window) { showTool("clips") }},
 				{Label: "系统监控", Click: func(*mygo.MenuItem, *mygo.Window) { showTool("monitor") }},
 				{Label: "服务监控", Click: func(*mygo.MenuItem, *mygo.Window) { showTool("services") }},
+				{Label: "Flow 流水线", Click: func(*mygo.MenuItem, *mygo.Window) { showTool("flow") }},
 				{Label: "显示 / 隐藏监控悬浮窗", Click: func(*mygo.MenuItem, *mygo.Window) { go overlay.Toggle() }},
 				shotItem("截图", ""),
 				shotItem("截图翻译", "translate"),

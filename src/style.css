@@ -4690,3 +4690,330 @@ html.clips #app {
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+
+/* Flow 流水线 */
+.fl-btn,
+.fl-out button,
+.fl-log-bar button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--card);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fl-btn:hover,
+.fl-out button:hover,
+.fl-log-bar button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fl-search {
+  width: 160px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: none;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.fl-search:focus {
+  border-color: var(--accent);
+}
+
+/* 状态颜色：圆点、小方块、文字共用 */
+.fl-s-success {
+  --st: var(--ok);
+}
+
+.fl-s-failed {
+  --st: #ef4444;
+}
+
+.fl-s-running {
+  --st: var(--accent);
+}
+
+.fl-s-pending,
+.fl-s-queued {
+  --st: #f59e0b;
+}
+
+.fl-s-waiting {
+  --st: #a855f7;
+}
+
+.fl-s-canceled,
+.fl-s-skipped {
+  --st: var(--muted);
+}
+
+b[class^="fl-s-"],
+span.fl-s-running {
+  color: var(--st, inherit);
+  font-weight: 600;
+}
+
+.fl-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.fl-item + .fl-item {
+  margin-top: 8px;
+}
+
+.fl-item.failed {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--line));
+}
+
+.fl-item.archived {
+  opacity: 0.6;
+}
+
+.fl-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.fl-item.success .fl-row > .sv-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent);
+}
+
+.fl-item.failed .fl-row > .sv-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 22%, transparent);
+}
+
+.fl-item:is(.running, .pending, .queued, .waiting) .fl-row > .sv-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: sv-blink 1.2s ease-in-out infinite;
+}
+
+.fl-item.waiting .fl-row > .sv-dot {
+  background: #a855f7;
+}
+
+.fl-fav {
+  margin-right: 4px;
+  color: #f59e0b;
+}
+
+.fl-remark {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sv-meta code,
+.fl-d-head code {
+  font-size: 11.5px;
+}
+
+/* 最近几次运行：一排小方块，旧的在左 */
+.fl-runs {
+  display: flex;
+  flex: none;
+  gap: 3px;
+}
+
+.fl-runs i {
+  width: 10px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--st, var(--muted));
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.fl-runs i:hover,
+.fl-runs i.on {
+  opacity: 1;
+  outline: 2px solid color-mix(in srgb, var(--st, var(--muted)) 40%, transparent);
+  outline-offset: 1px;
+}
+
+.fl-runs i.fl-s-running {
+  animation: sv-blink 1.2s ease-in-out infinite;
+}
+
+.fl-detail {
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.fl-d-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.fl-job {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.fl-job + .fl-job {
+  margin-top: 6px;
+}
+
+.fl-job.failed {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--line));
+}
+
+.fl-job-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fl-caret {
+  width: 10px;
+  color: var(--muted);
+}
+
+.fl-job-row .sv-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--st, var(--muted));
+}
+
+.fl-job-row .sv-dot.fl-s-running {
+  animation: sv-blink 1.2s ease-in-out infinite;
+}
+
+.fl-job-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.fl-steps {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.fl-steps i {
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--st, color-mix(in srgb, var(--muted) 30%, transparent));
+}
+
+.fl-steps i.fl-s-pending {
+  background: color-mix(in srgb, var(--muted) 25%, transparent);
+}
+
+.fl-steps i.fl-s-running {
+  animation: sv-blink 1.2s ease-in-out infinite;
+}
+
+.fl-job-st {
+  flex: none;
+  min-width: 110px;
+  font-size: 12px;
+  text-align: right;
+}
+
+.fl-outs:empty {
+  display: none;
+}
+
+.fl-outs {
+  padding: 0 10px 8px 36px;
+  font-size: 12.5px;
+}
+
+.fl-out {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.fl-out-k {
+  flex: none;
+  width: 150px;
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fl-out.named .fl-out-k {
+  color: inherit;
+  font-weight: 600;
+}
+
+.fl-out-v {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+a.fl-out-v {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+a.fl-out-v:hover {
+  text-decoration: underline;
+}
+
+.fl-out button,
+.fl-log-bar button {
+  flex: none;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.fl-logbox {
+  border-top: 1px solid var(--line);
+}
+
+.fl-log-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.fl-log {
+  max-height: 420px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  overflow: auto;
+  background: #0d1117;
+  color: #d1d5db;
+  border-radius: 0 0 8px 8px;
+  font: 12px/1.5 Consolas, "Cascadia Mono", "Microsoft YaHei", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.fl-more summary {
+  min-height: 24px;
+  line-height: 24px;
+  cursor: pointer;
+}

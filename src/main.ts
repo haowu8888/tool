@@ -5,6 +5,7 @@ import { clipsTool, showClips } from "./clips";
 import { focusSearch, launcherTool } from "./launcher";
 import { monitorTool } from "./monitor";
 import { servicesTool } from "./services";
+import { flowTool } from "./flow";
 import { focusAdd, notesTool } from "./notes";
 import { showOverlay } from "./overlay";
 import { shotTool, showPin, showScroll, showScrollFrame, showShot } from "./shot";
@@ -30,6 +31,7 @@ const tools: Tool[] = [
   clipsTool,
   monitorTool,
   servicesTool,
+  flowTool,
   {
     id: "virtual-screen",
     name: "断开物理屏",

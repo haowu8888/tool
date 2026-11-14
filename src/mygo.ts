@@ -170,6 +170,106 @@ export interface DisplayInfo {
   height: number;
 }
 
+/** FlowAlert is a run that failed, until the user looks at it. */
+export interface FlowAlert {
+  runId: string;
+  pipelineId: string;
+  pipeline: string;
+  number: number;
+  at: number;
+}
+
+/**
+ * FlowConfigView is the config for the page: whether there is a token, not
+ * the token.
+ */
+export interface FlowConfigView {
+  url: string;
+  hasToken: boolean;
+  notify: boolean;
+}
+
+/** FlowJob is a job of a run. */
+export interface FlowJob {
+  id: string;
+  name: string;
+  stage: string;
+  status: string;
+  exitCode?: number;
+  started?: number;
+  finished?: number;
+  steps: FlowStep[];
+  outputs: Record<string, string>;
+}
+
+/** FlowLog is a part of a job's log, and where the next part starts. */
+export interface FlowLog {
+  text: string;
+  next: number;
+  /** Cut is whether the start was left out, the log being long. */
+  cut?: boolean;
+}
+
+/** FlowPipeline is a pipeline with its last runs, newest first. */
+export interface FlowPipeline {
+  id: string;
+  name: string;
+  group?: string;
+  description?: string;
+  archived?: boolean;
+  favorite?: boolean;
+  canRun: boolean;
+  runs: FlowRun[];
+}
+
+/**
+ * FlowRun is a run of a pipeline. Times are Unix milliseconds, 0 for not
+ * yet.
+ */
+export interface FlowRun {
+  id: string;
+  pipelineId: string;
+  number: number;
+  /**
+   * Status is pending, queued, running, waiting (for an approval),
+   * success, failed, skipped or canceled.
+   */
+  status: string;
+  /** manual, webhook, cron, api, rollback */
+  trigger: string;
+  createdBy?: string;
+  commit?: string;
+  remark?: string;
+  created: number;
+  started?: number;
+  finished?: number;
+}
+
+/** FlowRunDetail is a run with its jobs. */
+export interface FlowRunDetail {
+  run: FlowRun;
+  pipeline: string;
+  jobs: FlowJob[];
+}
+
+/** FlowState is what the tool knows of the server. */
+export interface FlowState {
+  configured: boolean;
+  pipelines: FlowPipeline[];
+  /** why the last fetch failed */
+  error?: string;
+  checked?: number;
+  alerts: FlowAlert[];
+}
+
+/** FlowStep is a step of a job. */
+export interface FlowStep {
+  name: string;
+  status: string;
+  started?: number;
+  finished?: number;
+}
+
 /** GPUSample is the graphics processor's load. */
 export interface GPUSample {
   /** percent of its busiest engine, as Task Manager */
@@ -1308,6 +1408,96 @@ export const Services = {
   },
 } as const;
 
+/**
+ * Flow shows the user's Flow pipelines (https://flow.haowu.fun): their
+ * runs, logs and outputs, runs them, and tells when one fails.
+ */
+export const Flow = {
+  /** Ack stops a failed run's alert. */
+  ack(runID: string): Promise<void> {
+    return call("Flow.Ack", runID);
+  },
+  /** AckAll stops every alert. */
+  ackAll(): Promise<void> {
+    return call("Flow.AckAll");
+  },
+  /** Alerts returns the runs that failed and the user has not looked at. */
+  alerts(): Promise<FlowAlert[]> {
+    return call("Flow.Alerts");
+  },
+  /** Cancel stops a run. */
+  cancel(runID: string): Promise<void> {
+    return call("Flow.Cancel", runID);
+  },
+  /** Config returns the server the tool talks to. */
+  config(): Promise<FlowConfigView> {
+    return call("Flow.Config");
+  },
+  /**
+   * Detail returns a run with its jobs, and stops its alert: the user sees
+   * it.
+   */
+  detail(runID: string): Promise<FlowRunDetail> {
+    return call("Flow.Detail", runID);
+  },
+  /** Disconnect forgets the token. */
+  disconnect(): Promise<void> {
+    return call("Flow.Disconnect");
+  },
+  /**
+   * Log returns a job's log from offset on; from the start, only the end of
+   * a long one.
+   */
+  log(jobID: string, offset: number): Promise<FlowLog> {
+    return call("Flow.Log", jobID, offset);
+  },
+  /**
+   * Open opens a page of Flow, as "#/runs/<id>", or a link of a run's
+   * outputs in the browser.
+   */
+  open(target: string): Promise<void> {
+    return call("Flow.Open", target);
+  },
+  /** Refresh fetches the pipelines now. */
+  refresh(): Promise<void> {
+    return call("Flow.Refresh");
+  },
+  /** Retry runs a run's failed jobs again. */
+  retry(runID: string): Promise<void> {
+    return call("Flow.Retry", runID);
+  },
+  /**
+   * SetConfig checks the address and the token, an empty one keeping the
+   * last, with the server and keeps them. It returns the user's name.
+   */
+  setConfig(address: string, token: string, notify: boolean): Promise<string> {
+    return call("Flow.SetConfig", address, token, notify);
+  },
+  /** Show shows a run in the tool's page, as the bubble asks. */
+  show(runID: string): Promise<void> {
+    return call("Flow.Show", runID);
+  },
+  /** State returns the pipelines as last fetched. */
+  state(): Promise<FlowState> {
+    return call("Flow.State");
+  },
+  /** TakeFocus returns the run the page is to show, once. */
+  takeFocus(): Promise<string> {
+    return call("Flow.TakeFocus");
+  },
+  /** Trigger runs a pipeline, with its parameters' defaults. */
+  trigger(pipelineID: string, remark: string): Promise<FlowRun> {
+    return call("Flow.Trigger", pipelineID, remark);
+  },
+  /**
+   * Watch is told whether the page shows: the runs are fetched more often
+   * while it does.
+   */
+  watch(on: boolean): Promise<void> {
+    return call("Flow.Watch", on);
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
@@ -1321,6 +1511,10 @@ export const events = {
   clipsChanged: event<ClipItem[]>("clipsChanged"),
   /** ClipsSummoned tells the history's popup that the shortcut brought it up. */
   clipsSummoned: event<number>("clipsSummoned"),
+  /** FlowChanged is sent with the pipelines whenever they are fetched. */
+  flowChanged: event<FlowState>("flowChanged"),
+  /** FlowFocus asks the tool's page to show a run, as the bubble's 看日志. */
+  flowFocus: event<string>("flowFocus"),
   /**
    * LauncherChanged is sent with the new data whenever the apps or the
    * categories change.

@@ -1,6 +1,7 @@
 // The reminder bubble's page: the ringing todos beside the floating ball,
-// to do, put off or dismiss, and the services that went down.
-import { Notes, Reminder, Services, events, type ServiceView, type Todo } from "./mygo";
+// to do, put off or dismiss, the services that went down and the Flow
+// runs that failed.
+import { Flow, Notes, Reminder, Services, events, type FlowAlert, type ServiceView, type Todo } from "./mygo";
 import { REPEATS, dueInfo } from "./notes";
 import { settings } from "./settings";
 import { chime, esc } from "./ui";
@@ -14,8 +15,11 @@ export function showBubble(app: HTMLElement) {
   let seen = new Set<string>();
   let alerts: Todo[] = [];
   let down: ServiceView[] = [];
+  let failed: FlowAlert[] = [];
   const render = () => {
-    if (!alerts.length && !down.length) return;
+    if (!alerts.length && !down.length && !failed.length) return;
+    // The first section has the ✕.
+    const first = alerts.length ? "todo" : down.length ? "svc" : "flow";
     app.innerHTML = `
       <div class="b-card">
         ${
@@ -50,7 +54,7 @@ export function showBubble(app: HTMLElement) {
             ? `<div class="b-head${alerts.length ? " b-second" : ""}">
           <span class="b-bell">🔴</span><b>服务掉线了</b>${down.length > 1 ? `<span class="b-count">${down.length}</span>` : ""}
           <span class="l-spacer"></span>
-          ${alerts.length ? "" : `<button class="b-x" title="收起：悬浮球上留着红点">✕</button>`}
+          ${first === "svc" ? `<button class="b-x" title="收起：悬浮球上留着红点">✕</button>` : ""}
         </div>
         ${down
           .slice(0, shown)
@@ -69,6 +73,32 @@ export function showBubble(app: HTMLElement) {
         <button class="b-svc">${down.length > shown ? `还有 ${down.length - shown} 个，打开服务监控` : "打开服务监控"}</button>`
             : ""
         }
+        ${
+          failed.length
+            ? `<div class="b-head${first !== "flow" ? " b-second" : ""}">
+          <span class="b-bell">🛠</span><b>构建失败</b>${failed.length > 1 ? `<span class="b-count">${failed.length}</span>` : ""}
+          <span class="l-spacer"></span>
+          ${first === "flow" ? `<button class="b-x" title="收起：悬浮球上留着红点">✕</button>` : ""}
+        </div>
+        ${failed
+          .slice(-shown)
+          .reverse()
+          .map(
+            (a) => `
+              <div class="b-item" data-run="${esc(a.runId)}">
+                <div class="b-text">${esc(a.pipeline)} #${a.number}</div>
+                <div class="b-meta">${a.at ? new Date(a.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) + " 失败" : "失败"}</div>
+                <div class="b-actions">
+                  <button class="b-log">看日志</button>
+                  <button class="b-rerun">重试</button>
+                  <button class="b-ack">知道了</button>
+                </div>
+              </div>`,
+          )
+          .join("")}
+        ${failed.length > shown ? `<button class="b-flow">还有 ${failed.length - shown} 次，打开 Flow 流水线</button>` : ""}`
+            : ""
+        }
       </div>`;
     app.querySelector(".b-x")?.addEventListener("click", () => void Reminder.collapse());
     app.querySelector(".b-open")?.addEventListener("click", () => void Reminder.open());
@@ -82,6 +112,19 @@ export function showBubble(app: HTMLElement) {
       item.querySelector(".b-ok")!.addEventListener("click", () => void Notes.dismiss(t.id));
       item.querySelectorAll<HTMLElement>("[data-snooze]").forEach((b) => b.addEventListener("click", () => void Notes.snooze(t.id, Number(b.dataset.snooze))));
     });
+    app.querySelector(".b-flow")?.addEventListener("click", () => {
+      void Reminder.collapse();
+      void Flow.show("");
+    });
+    app.querySelectorAll<HTMLElement>(".b-item[data-run]").forEach((item) => {
+      const id = item.dataset.run!;
+      item.querySelector(".b-log")!.addEventListener("click", () => {
+        void Reminder.collapse();
+        void Flow.show(id);
+      });
+      item.querySelector(".b-rerun")!.addEventListener("click", () => void Flow.retry(id));
+      item.querySelector(".b-ack")!.addEventListener("click", () => void Flow.ack(id));
+    });
     app.querySelectorAll<HTMLElement>(".b-item[data-svc]").forEach((item) => {
       const id = item.dataset.svc!;
       item.querySelector(".b-retry")!.addEventListener("click", () => void Services.check(id));
@@ -90,9 +133,9 @@ export function showBubble(app: HTMLElement) {
     // The window fits the card.
     const card = app.querySelector<HTMLElement>(".b-card")!;
     void Reminder.resize(Math.ceil(card.getBoundingClientRect().height) + 16);
-    // A chime for a todo that just started ringing or a service that just
-    // went down, unless turned off.
-    const ids = [...alerts.map((t) => t.id), ...down.map((v) => "svc:" + v.id)];
+    // A chime for a todo that just started ringing, a service that just
+    // went down or a run that just failed, unless turned off.
+    const ids = [...alerts.map((t) => t.id), ...down.map((v) => "svc:" + v.id), ...failed.map((a) => "run:" + a.runId)];
     if (settings.reminder.sound && ids.some((id) => !seen.has(id))) chime();
     seen = new Set(ids);
   };
@@ -102,6 +145,14 @@ export function showBubble(app: HTMLElement) {
   });
   events.servicesChanged.on((list) => {
     down = (list ?? []).filter((v) => v.state.alert);
+    render();
+  });
+  events.flowChanged.on((s) => {
+    failed = s.alerts ?? [];
+    render();
+  });
+  void Flow.alerts().then((a) => {
+    failed = a ?? [];
     render();
   });
   void Notes.alerts().then((a) => {

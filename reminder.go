@@ -21,6 +21,7 @@ type Reminder struct {
 	height    int
 	alerts    int
 	down      int         // services that went down, which it lists too
+	builds    int         // Flow runs that failed, which it lists too
 	collapsed bool        // folded away until another todo rings or service goes down
 	hide      *time.Timer // folds it away after the minutes of the settings
 
@@ -67,7 +68,7 @@ func (r *Reminder) update(alerts []Todo, fresh bool) {
 		// A new todo gives the bubble its minutes again.
 		r.armHide()
 	}
-	any := r.alerts+r.down > 0
+	any := r.alerts+r.down+r.builds > 0
 	r.mu.Unlock()
 	r.widget.setAlert(any)
 	r.place()
@@ -82,7 +83,22 @@ func (r *Reminder) services(down []ServiceView, fresh bool) {
 		r.collapsed = false
 		r.armHide()
 	}
-	any := r.alerts+r.down > 0
+	any := r.alerts+r.down+r.builds > 0
+	r.mu.Unlock()
+	r.widget.setAlert(any)
+	r.place()
+}
+
+// flow shows or hides the bubble for the Flow runs that failed; one that
+// just failed unfolds it.
+func (r *Reminder) flow(failed []FlowAlert, fresh bool) {
+	r.mu.Lock()
+	r.builds = len(failed)
+	if fresh {
+		r.collapsed = false
+		r.armHide()
+	}
+	any := r.alerts+r.down+r.builds > 0
 	r.mu.Unlock()
 	r.widget.setAlert(any)
 	r.place()
@@ -93,7 +109,7 @@ func (r *Reminder) services(down []ServiceView, fresh bool) {
 func (r *Reminder) place() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.alerts+r.down == 0 || r.collapsed {
+	if r.alerts+r.down+r.builds == 0 || r.collapsed {
 		if r.win != nil {
 			r.win.Hide()
 		}

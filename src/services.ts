@@ -13,7 +13,7 @@ const intervals: [number, string][] = [
   [600, "10 分钟"],
 ];
 
-function ago(ms?: number) {
+export function ago(ms?: number) {
   if (!ms) return "";
   const s = (Date.now() - ms) / 1000;
   if (s < 60) return "刚刚";
@@ -30,7 +30,7 @@ function clock(ms: number) {
 }
 
 // lasted is how long, as 40 秒, 12 分钟 or 3 小时 5 分钟.
-function lasted(ms: number) {
+export function lasted(ms: number) {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${Math.max(s, 1)} 秒`;
   const m = Math.round(s / 60);

@@ -1,7 +1,7 @@
 // The floating ball's page: a click opens the toolbox, a right click its
 // menu, dragging moves it, and files dropped on it go to the launcher.
 import { onFileDrop } from "mygo-runtime";
-import { Launcher, Notes, Reminder, Services, VirtualScreen, Widget, events, type LauncherApp, type ServiceView, type Todo } from "./mygo";
+import { Flow, Launcher, Notes, Reminder, Services, VirtualScreen, Widget, events, type FlowAlert, type LauncherApp, type ServiceView, type Todo } from "./mygo";
 import { baseName } from "./launcher";
 import icon from "./assets/widget.png";
 
@@ -33,7 +33,7 @@ export function showWidget(app: HTMLElement) {
   });
   ball.addEventListener("pointerup", () => {
     // While todos ring a click shows them rather than the toolbox's home.
-    if (start) void (ringing ? Reminder.open() : down ? Services.open() : Widget.open());
+    if (start) void (ringing ? Reminder.open() : down ? Services.open() : failed.length ? Flow.show(failed[failed.length - 1]!.runId) : Widget.open());
     start = null;
   });
   // Stuck to a screen edge, the ball slides out while the pointer is over it.
@@ -57,17 +57,15 @@ export function showWidget(app: HTMLElement) {
   // count, and the ball sways.
   let ringing = 0;
   let down = 0;
+  let failed: FlowAlert[] = [];
   const alert = ball.querySelector<HTMLElement>(".w-alert")!;
   const renderAlerts = () => {
-    const n = ringing + down;
+    const n = ringing + down + failed.length;
     alert.hidden = !n;
     alert.textContent = n > 9 ? "9+" : String(n);
     ball.classList.toggle("w-ring", !!n);
-    ball.title = ringing
-      ? `${ringing} 条待办到时间了${down ? `，${down} 个服务掉线` : ""}：单击查看`
-      : down
-        ? `${down} 个服务掉线了：单击查看`
-        : "工具箱：单击打开 · 右键菜单 · 拖动移动 · 拖文件进来加到快捷启动";
+    const parts = [ringing && `${ringing} 条待办到时间了`, down && `${down} 个服务掉线`, failed.length && `${failed.length} 次构建失败`].filter(Boolean);
+    ball.title = parts.length ? `${parts.join("，")}：单击查看` : "工具箱：单击打开 · 右键菜单 · 拖动移动 · 拖文件进来加到快捷启动";
   };
   const setTodos = (alerts: Todo[]) => {
     ringing = alerts.length;
@@ -81,6 +79,12 @@ export function showWidget(app: HTMLElement) {
   void Notes.alerts().then(setTodos);
   events.servicesChanged.on((list) => setDown(list ?? []));
   void Services.alerts().then((list) => setDown(list ?? []));
+  const setFailed = (list: FlowAlert[]) => {
+    failed = list;
+    renderAlerts();
+  };
+  events.flowChanged.on((s) => setFailed(s.alerts ?? []));
+  void Flow.alerts().then((list) => setFailed(list ?? []));
 
   onFileDrop(({ paths }) => {
     if (!paths.length) return;
