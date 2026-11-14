@@ -41,6 +41,7 @@
 - Go 1.27+（`%LOCALAPPDATA%\Programs\go`）、Bun、WebView2；依赖只在宿主机装（容器的 bun lockfile 宿主机读不了）
 - `bun run dev` 热重载；`bun run build -- -platform windows/amd64` 产物在 `build/windows-amd64/`（exe + 安装包）
 - `vite.config.ts` 的 `katexWoff2Only` 把 KaTeX 样式里的 woff/ttf 字体去掉只留 woff2（少打 0.8MB 进 exe）；页面分成入口（约 76KB）和编辑器（约 720KB，按需加载）两块
+- 发布：Flow（https://flow.haowu.fun）流水线 `toolbox`，配置副本在 `deploy/flow.yaml`（改了要 PUT 到 Flow）。手动运行：在构建节点（老服务器，Linux）的 `golang:1.27.3` 里从 GitHub `haowu8888/tool` main 拉代码（直连常断，经 ghfast/gh-proxy 下载并核对提交号）→「安装系统软件包」装 nsis/zip → `mygo build -platform windows/amd64`（purego 不要 cgo，Linux 能交叉编译）→ 产物包 `toolbox` + 上传 Cloudreve `/builds/toolbox`（先清空，只留最新的安装包和免安装 zip，分享链接固定为 http://cloudreve.haowu.fun/s/qLux）。所以要先把代码推到 GitHub。Windows 专属单测不在流水线里跑
 - Go module 名是 `toolbox`：`tool` 会和 go.mod 的 `tool` 指令冲突
 
 ## 调试 `.dev/`

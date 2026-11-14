@@ -1,0 +1,90 @@
+# 工具箱：在 Linux 构建节点上交叉编译 Windows 版（安装包 + 免安装 zip）→ 产物包 + 上传 Cloudreve 网盘 /builds/toolbox（只留最新一版，带公开分享链接）
+# MyGo 用 purego，不需要 cgo，Linux 上 `mygo build -platform windows/amd64` 即可；Windows 专属的 Go 单测在本机跑
+name: toolbox
+concurrency:
+  group: toolbox-release
+retention:
+  runs: 30
+stages:
+  - name: 构建
+    jobs:
+      - name: windows
+        image: golang:1.27.3
+        timeout: 30m
+        env:
+          REPO: https://github.com/haowu8888/tool.git
+          BRANCH: main
+          GOPROXY: https://goproxy.cn,direct
+          GOFLAGS: -buildvcs=false
+          BUN_VERSION: 1.3.10
+          BUN_CONFIG_REGISTRY: https://registry.npmmirror.com
+        steps:
+          - name: 拉取代码
+            run: |
+              # 构建节点直连 GitHub 常断：先直连取提交号（请求很小），再经加速地址下载，核对提交号一致才构建，防止代理篡改代码
+              for i in 1 2 3 4 5; do
+                WANT="$(timeout 60 git ls-remote "$REPO" "refs/heads/$BRANCH" | cut -f1)" && [ -n "$WANT" ] && break
+                [ "$i" = 5 ] && { echo "无法从 GitHub 获取 $BRANCH 的提交号"; exit 1; }
+                sleep 5
+              done
+              echo "目标提交 $WANT"
+              git init -q src
+              for url in "https://ghfast.top/$REPO" "https://gh-proxy.com/$REPO" "$REPO"; do
+                if timeout 300 git -C src -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 fetch -q --depth 1 "$url" "$WANT" 2>/dev/null \
+                  || timeout 300 git -C src -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 fetch -q --depth 1 "$url" "$BRANCH"; then
+                  [ "$(git -C src rev-parse FETCH_HEAD)" = "$WANT" ] && { echo "已从 ${url%%/https*} 拉取"; break; }
+                  echo "$url 返回的提交与 GitHub 不一致，跳过"
+                fi
+                [ "$url" = "$REPO" ] && { echo "拉取代码失败"; exit 1; }
+              done
+              git -C src reset -q --hard "$WANT"
+              git -C src log -1 --format='%h %s (%an, %ad)' --date=iso
+          - name: 安装 Bun
+            run: |
+              # 从 npm 镜像取 Bun（GitHub 下载在国内太慢），放进跨任务复用的工具目录
+              BUN_DIR="$FLOW_TOOLS/bun-$BUN_VERSION"
+              if [ ! -x "$BUN_DIR/bun" ]; then
+                mkdir -p "$BUN_DIR"
+                curl -fsSL --retry 3 "$BUN_CONFIG_REGISTRY/@oven/bun-linux-x64/-/bun-linux-x64-$BUN_VERSION.tgz" \
+                  | tar -xz -C "$BUN_DIR" --strip-components=2 package/bin/bun
+              fi
+              echo "$BUN_DIR" >> "$FLOW_PATH"
+              "$BUN_DIR/bun" --version
+              go version
+          - name: 安装 NSIS
+            # mygo build 用 makensis 打安装包，没有就只出 exe
+            kind: install-packages
+            with:
+              packages: nsis zip
+              mirror: aliyun
+          - name: 安装依赖
+            run: cd src && bun install --frozen-lockfile
+          - name: 构建
+            run: |
+              cd src
+              VERSION="$(sed -nE 's/^\s*version: "([^"]+)".*/\1/p' mygo.config.ts)"
+              echo "版本 $VERSION（运行 #$FLOW_RUN_NUMBER，提交 $(git rev-parse --short HEAD)）"
+              # 先在 Linux 上对 Windows 做一次 vet，编译错误早点暴露
+              GOOS=windows GOARCH=amd64 go vet ./...
+              bun run build -- -platform windows/amd64
+              # 免安装版：exe 和旁边的资源一起打成 zip；安装包单独上传
+              cd build/windows-amd64
+              mkdir -p ../release
+              zip -q "../release/Toolbox-$VERSION-portable.zip" Toolbox.exe icon.png
+              cp toolbox-setup-*.exe ../release/
+              ls -l ../release
+              echo "VERSION=$VERSION" >> "$FLOW_OUTPUT"
+          - name: 产物包
+            kind: artifact-upload
+            with:
+              name: toolbox
+              paths: src/build/release/*
+              version: ${FLOW_RUN_NUMBER}
+          - name: 上传网盘
+            kind: cloudreve-upload
+            connection: cloudreve
+            with:
+              source: src/build/release/*
+              target: /builds/toolbox
+              clean: "true"
+              share: "true"
