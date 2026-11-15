@@ -30,10 +30,3 @@ func TestQRRoundTrip(t *testing.T) {
 		t.Error("empty picture read")
 	}
 }
-
-func TestHash(t *testing.T) {
-	h := (&Dev{}).Hash("abc")
-	if h.MD5 != "900150983cd24fb0d6963f7d28e17f72" || h.SHA256 != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" || h.CRC32 != "352441c2" || h.Size != 3 {
-		t.Errorf("got %+v", h)
-	}
-}

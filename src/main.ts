@@ -7,6 +7,7 @@ import { monitorTool } from "./monitor";
 import { servicesTool } from "./services";
 import { flowTool } from "./flow";
 import { devTool } from "./devtools";
+import { recordTool, showRecordPanel } from "./record";
 import { focusAdd, notesTool } from "./notes";
 import { showOverlay } from "./overlay";
 import { shotTool, showPin, showScroll, showScrollFrame, showShot } from "./shot";
@@ -29,6 +30,7 @@ const tools: Tool[] = [
   launcherTool,
   notesTool,
   shotTool,
+  recordTool,
   clipsTool,
   monitorTool,
   servicesTool,
@@ -52,10 +54,12 @@ const tools: Tool[] = [
           <div class="s-card v-displays"><div class="s-row muted">正在读取…</div></div>
         </section>
         <ul class="tips muted">
-          <li>${shortcutKeys("virtual") ? `全局快捷键 ${kbd(shortcutKeys("virtual"))} 断开 / 恢复。本机看不到屏幕时，按它就能把物理屏找回来：RustDesk 的隐私模式或残留的虚拟显示器占着桌面时，它也会把物理屏点亮、拔掉虚拟显示器。` : "全局快捷键已在设置里停用。"}</li>
+          <li>${shortcutKeys("virtual") ? `全局快捷键 ${kbd(shortcutKeys("virtual"))} 断开 / 恢复。本机屏幕是暗的、又不是这里断开的（残留的虚拟显示器占着桌面，或者一块显示器都没有）时，按它会把物理屏点亮、拔掉虚拟显示器。RustDesk 正连着时它不动显示器（多半是 RustDesk 的隐私模式），而是打开这里让你选。` : "全局快捷键已在设置里停用。"}</li>
           <li>远程那边也可以点托盘菜单「恢复物理屏」，或这里的按钮。退出工具箱、或者工具箱异常结束后下次启动，都会恢复原来的显示器布局。</li>
-          <li>需要 RustDesk 自带的虚拟显示器驱动（usbmmidd，装 RustDesk 时一起装上）。虚拟显示器的分辨率尽量和原来的主屏一致。</li>
-          <li>RustDesk 自己的隐私模式开着时不能用；开着时如果 RustDesk 或别的程序改了显示器，这里会自动结束。</li>
+          <li>需要 RustDesk 自带的虚拟显示器驱动（usbmmidd，装 RustDesk 时一起装上）。虚拟显示器的分辨率尽量和原来的主屏一致，没有这个分辨率就用 1920×1080。</li>
+          <li>断开后一直保持到你恢复为止。RustDesk 的会话结束时会把虚拟显示器拔掉、物理屏跟着亮起来，这里会马上重新插上并再断开（物理屏会亮一两秒）。</li>
+          <li>RustDesk 自己的隐私模式开着时不能用，两个选一个：想让物理屏在 RustDesk 退出后也不亮，就用这里的，不用开隐私模式。</li>
+          <li>锁屏界面上全局快捷键不管用（RustDesk 可以设成会话结束后锁定）。这时动一下本机的键盘或鼠标，物理屏会自己亮起来让你登录，断开随之结束；RustDesk 连着时远程那边的操作不算。</li>
           <li>屏幕是直接没信号，不是盖黑幕，所以指针、任务栏都不会露出来。</li>
         </ul>`;
       const button = panel.querySelector<HTMLButtonElement>("#virtual")!;
@@ -126,19 +130,23 @@ function renderDisplays(panel: HTMLElement, list: DisplayInfo[]) {
 }
 
 // showStartFailed tells, in a dialog, why the virtual screen could not
-// turn on. With no physical display showing, which RustDesk's privacy mode
-// does, the screen is dark already: it says so and offers to light it.
+// turn on, or why it ended by itself. With no physical display showing,
+// which RustDesk's privacy mode does, the screen is dark already: it says
+// so and offers to light it.
 function showStartFailed(reason: string) {
   document.querySelector<HTMLDialogElement>("dialog.v-failed")?.close();
   const noPhysical = reason.includes("物理显示器");
+  const ended = reason.includes("保持不住");
   const keys = shortcutKeys("virtual");
   const dlg = openDialog(`
-    <h2>⚠ 断开物理屏失败</h2>
+    <h2>⚠ ${ended ? "断开物理屏已结束" : "断开物理屏失败"}</h2>
     <p class="v-reason">${esc(reason)}</p>
     ${
-      noPhysical
+      ended
+        ? ""
+        : noPhysical
         ? `<p>现在<b>没有亮着的物理屏</b>，本机屏幕已经是暗的，多半是 RustDesk 的隐私模式开着，不需要再断开。</p>
-           <p class="muted">想让本机屏幕亮起来：点下面的「强制找回物理屏」${keys ? `或按 ${kbd(keys)}` : ""}。这会点亮物理屏、拔掉虚拟显示器，RustDesk 的隐私模式也随之结束。</p>`
+           <p class="muted">想让本机屏幕亮起来：点下面的「强制找回物理屏」。这会点亮物理屏、拔掉虚拟显示器，RustDesk 的隐私模式也随之结束。${keys ? `没有 RustDesk 连着时，按 ${kbd(keys)} 也一样。` : ""}</p>`
         : `<p class="muted">显示器没有被改动。</p>`
     }
     <p class="l-error" hidden></p>
@@ -259,6 +267,8 @@ if (params.has("widget")) {
   showClips(app);
 } else if (params.has("longframe")) {
   showScrollFrame(app);
+} else if (params.has("rec")) {
+  showRecordPanel(app);
 } else if (params.has("scroll")) {
   showScroll(app);
 } else if (params.has("pin")) {

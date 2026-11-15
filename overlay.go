@@ -120,6 +120,20 @@ func (o *Overlay) Toggle() {
 	o.settings.update(func(s *AppSettings) { s.Monitor.Overlay.Show = !s.Monitor.Overlay.Show })
 }
 
+// remake closes the window, for apply to make another: after its display
+// changed its scale, the window keeps a black box behind its page.
+func (o *Overlay) remake() {
+	o.mu.Lock()
+	win := o.win
+	if win == nil || o.dragging {
+		o.mu.Unlock()
+		return
+	}
+	o.win = nil
+	o.mu.Unlock()
+	win.Destroy()
+}
+
 // apply shows, hides or changes the window as the settings say.
 func (o *Overlay) apply(s OverlaySettings) {
 	o.mu.Lock()

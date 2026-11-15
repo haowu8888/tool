@@ -67,6 +67,9 @@ func (w *Widget) Menu() {
 func (w *Widget) Peek(over bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.win == nil {
+		return // being made anew
+	}
 	if w.timer != nil {
 		w.timer.Stop()
 		w.timer = nil
@@ -202,6 +205,25 @@ func (w *Widget) anchor() (x, y, size int, ok bool) {
 		return 0, 0, 0, false
 	}
 	return w.x, w.y, w.win.Bounds().Width, true
+}
+
+// remake closes the ball's window, for apply to make another: after its
+// display changed its scale, the window keeps a black box behind the ball.
+func (w *Widget) remake() {
+	w.mu.Lock()
+	win := w.win
+	if win == nil || w.dragging || w.menuOpen {
+		w.mu.Unlock()
+		return
+	}
+	w.win = nil
+	w.slides++ // stop a slide
+	if w.timer != nil {
+		w.timer.Stop()
+		w.timer = nil
+	}
+	w.mu.Unlock()
+	win.Destroy()
 }
 
 // apply shows, hides or resizes the ball as the settings say.

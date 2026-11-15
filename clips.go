@@ -559,6 +559,9 @@ func (c *Clips) summon() {
 		})
 		// Alt+F4 hides it, for the next time.
 		c.popup.OnClose(func(e *mygo.CloseEvent) {
+			if appQuitting.Load() {
+				return
+			}
 			e.PreventDefault()
 			go c.Hide()
 		})

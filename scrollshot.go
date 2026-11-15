@@ -148,6 +148,9 @@ func (s *Shot) Scroll(display int64, r ShotRect) error {
 	rect := sel.Add(mon.Min)
 	ss := &scrollShot{rect: rect, stop: make(chan struct{}), frame: frame, panel: panel, d: d, sel: sel, restore: restore, changed: time.Now()}
 	panel.OnClose(func(e *mygo.CloseEvent) {
+		if appQuitting.Load() {
+			return
+		}
 		e.PreventDefault()
 		go s.ScrollEnd("")
 	})

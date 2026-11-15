@@ -7,3 +7,6 @@ mygo_windows_*.syso
 /.dev/*.txt
 /.dev/js/
 /.dev/*.log
+/.dev/*.exe
+/.dev/*.jpg
+/.dev/rec-out/

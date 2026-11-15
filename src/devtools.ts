@@ -1,17 +1,18 @@
-// The developer's small tools: JSON, encodings, timestamps, digests, QR
-// codes (made, or read from a picture or the screen), UUIDs and passwords.
+// The developer's small tools: JSON (as a folding tree), timestamps, a
+// calculator, QR codes (made, or read from a picture or the screen), UUIDs
+// and passwords.
 import { onFileDrop } from "mygo-runtime";
 import { icons } from "./icons";
-import { Dev, Notes, events, type DevHashes, type DevQRResult } from "./mygo";
+import { calc, calcFunctions, show as showNum, tidy } from "./calc";
+import { Dev, Notes, events, type DevQRResult } from "./mygo";
 import { ago } from "./services";
 import { errorText, esc, onLeave, showError, toast } from "./ui";
 
-type Tab = "json" | "codec" | "time" | "hash" | "qr" | "gen";
+type Tab = "json" | "time" | "calc" | "qr" | "gen";
 const tabs: [Tab, string][] = [
   ["json", "JSON"],
-  ["codec", "编码转换"],
   ["time", "时间戳"],
-  ["hash", "哈希"],
+  ["calc", "计算器"],
   ["qr", "二维码"],
   ["gen", "UUID / 密码"],
 ];
@@ -53,7 +54,7 @@ export const devTool = {
       p.querySelectorAll<HTMLElement>(".dv-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
       for (const fn of leaveTab.splice(0)) fn();
       const off = (fn: () => void) => leaveTab.push(fn);
-      ({ json: renderJSON, codec: renderCodec, time: renderTime, hash: renderHash, qr: renderQR, gen: renderGen })[t](body, off);
+      ({ json: renderJSON, time: renderTime, calc: renderCalc, qr: renderQR, gen: renderGen })[t](body, off);
     };
     p.querySelectorAll<HTMLElement>(".dv-tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab as Tab)));
     onLeave(() => {
@@ -82,11 +83,123 @@ function area(box: HTMLElement, sel: string, key: string) {
 
 // ---- JSON ----
 
+// The result shows as a tree, whose objects and arrays fold, or as text.
+const viewKey = "dev-json-view";
+let jsonView: "tree" | "text" = (() => {
+  try {
+    return localStorage.getItem(viewKey) === "text" ? "text" : "tree";
+  } catch {
+    return "tree";
+  }
+})();
+
+const isBox = (v: unknown): v is Record<string, unknown> | unknown[] => !!v && typeof v === "object";
+
+// count counts a value's nodes, up to a cap.
+function count(v: unknown, cap = 5000): number {
+  let n = 0;
+  const walk = (x: unknown) => {
+    if (++n > cap) return;
+    if (isBox(x)) for (const c of Object.values(x)) walk(c);
+  };
+  walk(v);
+  return n;
+}
+
+// pathOf is a member's path, as $.a.b[0] or $["a b"].
+function pathOf(parent: string, key: string | number) {
+  if (typeof key === "number") return `${parent}[${key}]`;
+  return /^[A-Za-z_$][\w$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
+}
+
+// JSONTree draws a value as a tree. Objects and arrays deeper than open
+// levels start folded, their members drawn when first unfolded.
+class JSONTree {
+  private values: unknown[] = [];
+  constructor(private el: HTMLElement) {
+    el.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement;
+      const k = t.closest<HTMLElement>(".jt-k, .jt-ix");
+      if (k) return copy(k.dataset.path!, `已复制路径 ${k.dataset.path}`);
+      if (!t.closest(".jt-tg, .jt-o, .jt-sum")) return;
+      const n = t.closest<HTMLElement>(".jt-n");
+      // Alt or Shift unfolds all that is inside.
+      if (n) this.toggle(n, e.altKey || e.shiftKey);
+    });
+  }
+
+  show(v: unknown, open: number) {
+    this.values = [];
+    this.el.innerHTML = `<div class="jt">${this.node(v, null, "$", 0, open, true)}</div>`;
+  }
+
+  private node(v: unknown, key: string | number | null, path: string, depth: number, open: number, last: boolean): string {
+    const comma = last ? "" : `<span class="jt-punct">,</span>`;
+    const label =
+      key === null
+        ? ""
+        : typeof key === "number"
+          ? `<span class="jt-ix" data-path="${esc(path)}" title="点击复制路径">${key}</span><span class="jt-punct">: </span>`
+          : `<span class="jt-k" data-path="${esc(path)}" title="点击复制路径">${esc(JSON.stringify(key))}</span><span class="jt-punct">: </span>`;
+    if (!isBox(v) || !Object.keys(v).length) {
+      return `<div class="jt-l"><span class="jt-tg"></span>${label}${leaf(v)}${comma}</div>`;
+    }
+    const arr = Array.isArray(v);
+    const [o, c] = arr ? ["[", "]"] : ["{", "}"];
+    const n = Object.keys(v).length;
+    const id = this.values.push(v) - 1;
+    const isOpen = depth < open;
+    return `<div class="jt-n${isOpen ? "" : " fold"}" data-i="${id}" data-p="${esc(path)}" data-d="${depth}">
+      <div class="jt-l"><span class="jt-tg"></span>${label}<span class="jt-o">${o}</span><span class="jt-sum">…<small>${n} ${arr ? "项" : "个键"}</small>${c}</span>${comma ? `<span class="jt-sumc">${comma}</span>` : ""}</div>
+      <div class="jt-c">${isOpen ? this.children(v, path, depth, open) : ""}</div>
+      <div class="jt-l jt-end"><span class="jt-tg"></span><span class="jt-o">${c}</span>${comma}</div>
+    </div>`;
+  }
+
+  private children(v: Record<string, unknown> | unknown[], path: string, depth: number, open: number) {
+    const entries: [string | number, unknown][] = Array.isArray(v) ? v.map((x, i) => [i, x]) : Object.entries(v);
+    return entries.map(([k, x], i) => this.node(x, k, pathOf(path, k), depth + 1, open, i === entries.length - 1)).join("");
+  }
+
+  private toggle(n: HTMLElement, deep: boolean) {
+    const c = n.querySelector<HTMLElement>(":scope > .jt-c")!;
+    const fold = !n.classList.contains("fold") && !deep;
+    if (!fold && (!c.childElementCount || deep)) {
+      const v = this.values[Number(n.dataset.i)] as Record<string, unknown> | unknown[];
+      const depth = Number(n.dataset.d);
+      c.innerHTML = this.children(v, n.dataset.p!, depth, deep ? Infinity : depth + 1);
+    }
+    n.classList.toggle("fold", fold);
+  }
+}
+
+function leaf(v: unknown) {
+  if (v === null) return `<span class="jt-null">null</span>`;
+  if (Array.isArray(v)) return `<span class="jt-o">[]</span>`;
+  switch (typeof v) {
+    case "string":
+      return `<span class="jt-s">${esc(JSON.stringify(v))}</span>`;
+    case "number":
+      return `<span class="jt-num">${v}</span>`;
+    case "boolean":
+      return `<span class="jt-bool">${v}</span>`;
+    default:
+      return `<span class="jt-o">{}</span>`;
+  }
+}
+
 function renderJSON(box: HTMLElement) {
   box.innerHTML = `
     <div class="dv-two">
-      <div class="dv-col"><div class="dv-bar"><b>输入</b><span class="l-spacer"></span><button data-do="paste">粘贴</button><button data-do="clear">清空</button></div><textarea class="dv-text dv-in" spellcheck="false" placeholder='粘贴 JSON，如 {"a":1,"b":[1,2]}'></textarea></div>
-      <div class="dv-col"><div class="dv-bar"><b>结果</b><span class="dv-msg"></span><span class="l-spacer"></span><button data-do="copy">复制</button><button data-do="use">用作输入</button></div><textarea class="dv-text dv-out" spellcheck="false" readonly></textarea></div>
+      <div class="dv-col"><div class="dv-bar"><b>输入</b><span class="l-spacer"></span><button data-do="paste">粘贴</button><button data-do="clear">清空</button></div><textarea class="dv-text dv-in" spellcheck="false" placeholder='粘贴或输入 JSON，如 {"a":1,"b":[1,2]}'></textarea></div>
+      <div class="dv-col">
+        <div class="dv-bar"><b>结果</b><span class="s-seg dv-view"><button data-view="tree">树形</button><button data-view="text">文本</button></span><span class="dv-msg"></span><span class="l-spacer"></span><button data-do="copy">复制</button><button data-do="use">用作输入</button></div>
+        <div class="dv-text dv-tree" hidden>
+          <div class="jt-bar"><span class="muted">展开到</span><button data-level="1">1 层</button><button data-level="2">2 层</button><button data-level="3">3 层</button><button data-level="all">全部展开</button><button data-level="0">全部折叠</button><span class="l-spacer"></span><span class="muted jt-hint">点 ▸ 折叠/展开，Alt+点击展开整支，点键名复制路径</span></div>
+          <div class="jt-box"></div>
+        </div>
+        <textarea class="dv-text dv-out" spellcheck="false" readonly></textarea>
+      </div>
     </div>
     <div class="dv-acts">
       <button class="primary" data-do="format">格式化</button>
@@ -98,10 +211,29 @@ function renderJSON(box: HTMLElement) {
     </div>`;
   const input = area(box, ".dv-in", "json");
   const out = box.querySelector<HTMLTextAreaElement>(".dv-out")!;
+  const treeEl = box.querySelector<HTMLElement>(".dv-tree")!;
+  const tree = new JSONTree(treeEl.querySelector<HTMLElement>(".jt-box")!);
   const msg = box.querySelector<HTMLElement>(".dv-msg")!;
+  // The value the tree shows; undefined when the result is only text, as a
+  // string made of JSON.
+  let value: unknown;
+  let last = "format";
   const indent = () => {
     const v = box.querySelector<HTMLSelectElement>(".dv-indent")!.value;
     return v === "tab" ? "\t" : Number(v);
+  };
+  const setView = () => {
+    const tv = jsonView === "tree" && value !== undefined;
+    treeEl.hidden = !tv;
+    out.hidden = tv;
+    box.querySelectorAll<HTMLElement>(".dv-view button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.view === (tv ? "tree" : "text"));
+      b.toggleAttribute("disabled", b.dataset.view === "tree" && value === undefined && !!out.value);
+    });
+  };
+  const drawTree = (open?: number) => {
+    if (value === undefined) return;
+    tree.show(value, open ?? (count(value, 400) <= 400 ? Infinity : 2));
   };
   const sortKeys = (v: unknown): unknown =>
     Array.isArray(v) ? v.map(sortKeys) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys((v as Record<string, unknown>)[k])])) : v;
@@ -125,167 +257,88 @@ function renderJSON(box: HTMLElement) {
   const run = (what: string) => {
     try {
       let r: string;
+      let v: unknown;
       switch (what) {
         case "format":
-          r = JSON.stringify(parse(), null, indent());
+          v = parse();
+          r = JSON.stringify(v, null, indent());
           break;
         case "minify":
-          r = JSON.stringify(parse());
+          v = parse();
+          r = JSON.stringify(v);
           break;
         case "sort":
-          r = JSON.stringify(sortKeys(parse()), null, indent());
+          v = sortKeys(parse());
+          r = JSON.stringify(v, null, indent());
           break;
         case "escape":
           r = JSON.stringify(input.value);
           break;
         case "unescape": {
-          const v = JSON.parse(input.value.trim());
-          if (typeof v !== "string") throw new Error("输入不是 JSON 字符串（要带引号，如 \"{\\\"a\\\":1}\"）");
-          r = v;
+          const s = JSON.parse(input.value.trim());
+          if (typeof s !== "string") throw new Error("输入不是 JSON 字符串（要带引号，如 \"{\\\"a\\\":1}\"）");
+          r = s;
           break;
         }
         default:
           return;
       }
+      last = what;
+      value = v;
       out.value = r;
       msg.className = "dv-msg dv-ok";
       msg.textContent = `✓ ${r.length.toLocaleString()} 字符`;
+      // Minified, it is wanted as text.
+      if (what === "minify") jsonView = "text";
+      drawTree();
     } catch (e) {
+      value = undefined;
       out.value = "";
       msg.className = "dv-msg dv-bad";
       msg.textContent = errorText(e);
+      msg.title = errorText(e);
     }
+    setView();
   };
   box.addEventListener("click", (e) => {
-    const what = (e.target as HTMLElement).closest<HTMLElement>("[data-do]")?.dataset.do;
+    const t = e.target as HTMLElement;
+    const view = t.closest<HTMLElement>("[data-view]")?.dataset.view;
+    if (view) {
+      jsonView = view as "tree" | "text";
+      try {
+        localStorage.setItem(viewKey, jsonView);
+      } catch {}
+      return setView();
+    }
+    const level = t.closest<HTMLElement>("[data-level]")?.dataset.level;
+    if (level) return drawTree(level === "all" ? Infinity : Number(level));
+    const what = t.closest<HTMLElement>("[data-do]")?.dataset.do;
     if (!what) return;
-    if (what === "paste") void navigator.clipboard.readText().then((t) => ((input.value = kept.json = t), run("format")), showError);
-    else if (what === "clear") (input.value = kept.json = ""), (out.value = ""), (msg.textContent = "");
-    else if (what === "copy") out.value && copy(out.value);
-    else if (what === "use") out.value && ((input.value = kept.json = out.value), (out.value = ""), (msg.textContent = ""));
+    if (what === "paste") void navigator.clipboard.readText().then((s) => ((input.value = kept.json = s), run("format")), showError);
+    else if (what === "clear") {
+      input.value = kept.json = out.value = msg.textContent = "";
+      value = undefined;
+      setView();
+    } else if (what === "copy") out.value && copy(out.value);
+    else if (what === "use") out.value && ((input.value = kept.json = out.value), run("format"));
     else run(what);
   });
-  // Pasted, it is formatted at once.
-  input.addEventListener("paste", () => setTimeout(() => run("format")));
-  if (input.value) run("format");
-}
-
-// ---- Encodings ----
-
-const utf8 = { enc: new TextEncoder(), dec: new TextDecoder("utf-8", { fatal: true }) };
-
-const codecs: Record<string, [string, (s: string) => string, (s: string) => string]> = {
-  base64: [
-    "Base64",
-    (s) => {
-      // In pieces: a long text spread at once overflows the stack.
-      const b = utf8.enc.encode(s);
-      let bin = "";
-      for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
-      return btoa(bin);
-    },
-    (s) => {
-      const t = s.trim().replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
-      return utf8.dec.decode(Uint8Array.from(atob(t + "=".repeat((4 - (t.length % 4)) % 4)), (c) => c.charCodeAt(0)));
-    },
-  ],
-  url: ["URL", (s) => encodeURIComponent(s), (s) => decodeURIComponent(s.replace(/\+/g, " "))],
-  html: [
-    "HTML 实体",
-    (s) => s.replace(/[&<>"']/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt", '"': "quot", "'": "#39" }[c]};`),
-    (s) => {
-      const t = document.createElement("textarea");
-      t.innerHTML = s;
-      return t.value;
-    },
-  ],
-  unicode: [
-    "Unicode 转义",
-    (s) => [...s].map((c) => (c.charCodeAt(0) < 128 ? c : [...c].map((u) => "\\u" + u.charCodeAt(0).toString(16).padStart(4, "0")).join(""))).join("").replace(/[\ud800-\udfff]/g, (u) => "\\u" + u.charCodeAt(0).toString(16)),
-    (s) => s.replace(/\\u\{([0-9a-f]+)\}|\\u([0-9a-f]{4})/gi, (_, a, b) => String.fromCodePoint(parseInt(a ?? b, 16))),
-  ],
-  hex: [
-    "十六进制",
-    (s) => [...utf8.enc.encode(s)].map((b) => b.toString(16).padStart(2, "0")).join(" "),
-    (s) => {
-      const t = s.replace(/0x/gi, "").replace(/[^0-9a-f]/gi, "");
-      if (t.length % 2) throw new Error("十六进制位数不对");
-      return utf8.dec.decode(Uint8Array.from(t.match(/../g) ?? [], (h) => parseInt(h, 16)));
-    },
-  ],
-  jwt: [
-    "JWT",
-    () => {
-      throw new Error("JWT 只能解码");
-    },
-    (s) =>
-      s
-        .trim()
-        .split(".")
-        .slice(0, 2)
-        .map((part, i) => `// ${i ? "载荷" : "头部"}\n${JSON.stringify(JSON.parse(codecs.base64![2](part)), null, 2)}`)
-        .join("\n\n"),
-  ],
-};
-
-function renderCodec(box: HTMLElement) {
-  const kind = kept.codecKind ?? "base64";
-  box.innerHTML = `
-    <div class="s-seg dv-kinds">${Object.entries(codecs)
-      .map(([k, [name]]) => `<button data-kind="${k}" class="${k === kind ? "on" : ""}">${name}</button>`)
-      .join("")}</div>
-    <div class="dv-two">
-      <div class="dv-col"><div class="dv-bar"><b>输入</b><span class="l-spacer"></span><button data-do="paste">粘贴</button><button data-do="clear">清空</button></div><textarea class="dv-text dv-in" spellcheck="false" placeholder="要编码或解码的文字"></textarea></div>
-      <div class="dv-col"><div class="dv-bar"><b>结果</b><span class="dv-msg"></span><span class="l-spacer"></span><button data-do="copy">复制</button><button data-do="use">用作输入</button></div><textarea class="dv-text dv-out" spellcheck="false" readonly></textarea></div>
-    </div>
-    <div class="dv-acts"><button class="primary" data-do="enc">编码 →</button><button class="primary" data-do="dec">解码 →</button><span class="muted dv-tip">输入时自动判断：看着像编码过的就解码</span></div>`;
-  const input = area(box, ".dv-in", "codec");
-  const out = box.querySelector<HTMLTextAreaElement>(".dv-out")!;
-  const msg = box.querySelector<HTMLElement>(".dv-msg")!;
-  let cur = kind;
-  const run = (dir: "enc" | "dec") => {
-    if (!input.value) {
-      out.value = msg.textContent = "";
-      return;
-    }
-    try {
-      out.value = codecs[cur]![dir === "enc" ? 1 : 2](input.value);
-      msg.className = "dv-msg dv-ok";
-      msg.textContent = dir === "enc" ? "已编码" : "已解码";
-    } catch (e) {
-      out.value = "";
-      msg.className = "dv-msg dv-bad";
-      msg.textContent = `${dir === "enc" ? "编码" : "解码"}失败：${errorText(e).replace(/^.*?: /, "")}`;
-    }
-  };
-  // looksEncoded guesses which way the input goes.
-  const looksEncoded = (s: string) =>
-    ({
-      base64: /^[A-Za-z0-9+/_-]{8,}={0,2}$/.test(s.trim()),
-      url: /%[0-9a-f]{2}/i.test(s),
-      html: /&(#\d+|#x[0-9a-f]+|[a-z]+);/i.test(s),
-      unicode: /\\u[0-9a-f]{4}/i.test(s),
-      hex: /^(0x)?([0-9a-f]{2}[\s,]*)+$/i.test(s.trim()),
-      jwt: true,
-    })[cur] ?? false;
-  const auto = () => run(looksEncoded(input.value) ? "dec" : "enc");
-  input.addEventListener("input", auto);
-  box.querySelectorAll<HTMLElement>(".dv-kinds button").forEach((b) =>
-    b.addEventListener("click", () => {
-      cur = kept.codecKind = b.dataset.kind!;
-      box.querySelectorAll(".dv-kinds button").forEach((o) => o.classList.toggle("on", o === b));
-      auto();
-    }),
-  );
-  box.addEventListener("click", (e) => {
-    const what = (e.target as HTMLElement).closest<HTMLElement>("[data-do]")?.dataset.do;
-    if (what === "enc" || what === "dec") run(what);
-    else if (what === "paste") void navigator.clipboard.readText().then((t) => ((input.value = kept.codec = t), auto()), showError);
-    else if (what === "clear") (input.value = kept.codec = ""), auto();
-    else if (what === "copy") out.value && copy(out.value);
-    else if (what === "use") out.value && ((input.value = kept.codec = out.value), auto());
+  // Typed or pasted, it is worked out again at once.
+  let timer = 0;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      if (!input.value.trim()) {
+        out.value = msg.textContent = "";
+        value = undefined;
+        return setView();
+      }
+      run(last === "escape" || last === "unescape" ? "format" : last);
+    }, 300);
   });
-  auto();
+  box.querySelector(".dv-indent")!.addEventListener("change", () => input.value.trim() && run(last));
+  if (input.value) run("format");
+  else setView();
 }
 
 // ---- Timestamps ----
@@ -300,7 +353,7 @@ function renderTime(box: HTMLElement, off: (fn: () => void) => void) {
       <div class="s-row"><span>现在（毫秒）</span><b class="dv-now-ms"></b><button data-copy-now="ms">复制</button></div>
       <div class="s-row"><span>本地时间</span><b class="dv-now-l"></b><button data-copy-now="l">复制</button></div>
     </div>
-    <div class="dv-time-in"><input class="l-search dv-ts" placeholder="时间戳（秒或毫秒，自动判断）或日期，如 2026-11-15 08:30、2026-11-15T00:30:00Z" spellcheck="false" /></div>
+    <div class="dv-time-in"><input class="l-search dv-ts" placeholder="时间戳（秒或毫秒，自动判断）或日期，如 2026-11-15 08:30" spellcheck="false" /><input type="datetime-local" step="1" class="dv-pick" title="选择日期和时间" /><button data-do="now">现在</button></div>
     <div class="s-card dv-conv"></div>`;
   const nowRow = () => {
     const d = new Date();
@@ -314,11 +367,19 @@ function renderTime(box: HTMLElement, off: (fn: () => void) => void) {
   const input = box.querySelector<HTMLInputElement>(".dv-ts")!;
   input.value = kept.time ?? "";
   const conv = box.querySelector<HTMLElement>(".dv-conv")!;
+  const pick = box.querySelector<HTMLInputElement>(".dv-pick")!;
+  // Picked, the time goes in the box as text.
+  pick.addEventListener("input", () => {
+    if (!pick.value) return;
+    input.value = pick.value.replace("T", " ") + (pick.value.length === 16 ? ":00" : "");
+    render();
+  });
   const render = () => {
     kept.time = input.value;
     const s = input.value.trim();
     if (!s) {
-      conv.innerHTML = `<div class="s-row muted">输入时间戳或日期，这里列出各种格式</div>`;
+      pick.value = "";
+      conv.innerHTML = `<div class="s-row muted">输入时间戳或日期，或在右边选一个时间，这里列出各种格式</div>`;
       return;
     }
     let d: Date;
@@ -337,6 +398,7 @@ function renderTime(box: HTMLElement, off: (fn: () => void) => void) {
       conv.innerHTML = `<div class="s-row s-bad">认不出这个时间</div>`;
       return;
     }
+    if (document.activeElement !== pick && d.getFullYear() >= 1 && d.getFullYear() <= 9999) pick.value = local(d).replace(" ", "T");
     const rows: [string, string][] = [
       ["本地时间", local(d)],
       ["秒", String(Math.floor(d.getTime() / 1000))],
@@ -353,6 +415,10 @@ function renderTime(box: HTMLElement, off: (fn: () => void) => void) {
   input.addEventListener("input", render);
   box.addEventListener("click", (e) => {
     const b = e.target as HTMLElement;
+    if (b.closest('[data-do="now"]')) {
+      input.value = local(new Date());
+      render();
+    }
     const now = b.closest<HTMLElement>("[data-copy-now]")?.dataset.copyNow;
     if (now) copy(box.querySelector(`.dv-now-${now}`)!.textContent!);
     const c = b.closest<HTMLElement>("[data-copy]");
@@ -369,91 +435,219 @@ function relFuture(ms: number) {
   return `${Math.floor(s / 86400)} 天后`;
 }
 
-// ---- Digests ----
+// ---- Calculator ----
 
-function renderHash(box: HTMLElement, off: (fn: () => void) => void) {
-  box.innerHTML = `
-    <div class="dv-bar"><b>文字</b><span class="l-spacer"></span><button data-do="file">选文件…</button><span class="muted">也可以把文件拖进窗口</span></div>
-    <textarea class="dv-text dv-in dv-short" spellcheck="false" placeholder="输入文字，按 UTF-8 算"></textarea>
-    <div class="dv-bar"><b class="dv-src">结果</b><span class="l-spacer"></span><label class="dv-opt"><input type="checkbox" class="dv-upper" /> 大写</label></div>
-    <div class="s-card dv-hashes"></div>
-    <div class="dv-time-in"><input class="l-search dv-expect" placeholder="粘贴期望的哈希值，对比是否一致" spellcheck="false" /></div>`;
-  const input = area(box, ".dv-in", "hash");
-  const list = box.querySelector<HTMLElement>(".dv-hashes")!;
-  const upper = box.querySelector<HTMLInputElement>(".dv-upper")!;
-  const expect = box.querySelector<HTMLInputElement>(".dv-expect")!;
-  let h: DevHashes | null = null;
-  let src = "";
-  const render = () => {
-    box.querySelector(".dv-src")!.textContent = src || "结果";
-    if (!h) {
-      list.innerHTML = `<div class="s-row muted">输入文字或选文件</div>`;
-      return;
-    }
-    const want = expect.value.trim().toLowerCase();
-    const rows: [string, string][] = [
-      ["MD5", h.md5],
-      ["SHA-1", h.sha1],
-      ["SHA-256", h.sha256],
-      ["SHA-512", h.sha512],
-      ["CRC32", h.crc32],
-    ];
-    list.innerHTML =
-      rows
-        .map(([k, v]) => {
-          const shown = upper.checked ? v.toUpperCase() : v;
-          const hit = want && v === want;
-          return `<div class="s-row dv-hash${hit ? " hit" : ""}"><span>${k}${hit ? " ✓ 一致" : ""}</span><code>${shown}</code><button data-copy="${shown}">复制</button></div>`;
-        })
-        .join("") + (want && !rows.some(([, v]) => v === want) ? `<div class="s-row s-bad">和期望值都不一致</div>` : "");
-  };
-  let timer = 0;
-  const hashText = () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      if (!input.value) {
-        h = null;
-        src = "";
-        return render();
-      }
-      void Dev.hash(input.value).then((r) => {
-        h = r;
-        src = `文字的哈希（${r.size} 字节）`;
-        render();
-      });
-    }, 150);
-  };
-  const fileDone = (r: DevHashes) => {
-    if (!r.name) return;
-    h = r;
-    src = `文件「${r.name}」的哈希（${fmtSize(r.size)}）`;
-    render();
-  };
-  input.addEventListener("input", hashText);
-  upper.addEventListener("change", render);
-  expect.addEventListener("input", render);
-  box.addEventListener("click", (e) => {
-    const t = e.target as HTMLElement;
-    if (t.closest('[data-do="file"]')) void Dev.pickFile().then(fileDone, showError);
-    const c = t.closest<HTMLElement>("[data-copy]");
-    if (c) copy(c.dataset.copy!);
-  });
-  off(
-    onFileDrop(({ paths }) => {
-      if (!paths[0]) return;
-      toast("正在计算…");
-      void Dev.hashFile(paths[0]).then(fileDone, showError);
-    }),
-  );
-  if (input.value) hashText();
-  else render();
+const histKey = "dev-calc-hist";
+const degKey = "dev-calc-deg";
+
+type Calc = { e: string; r: string };
+
+function loadHist(): Calc[] {
+  try {
+    const h = JSON.parse(localStorage.getItem(histKey) ?? "[]");
+    return Array.isArray(h) ? h.slice(0, 50) : [];
+  } catch {
+    return [];
+  }
 }
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} 字节`;
-  if (n < 1 << 20) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1 << 30) return `${(n / (1 << 20)).toFixed(1)} MB`;
-  return `${(n / (1 << 30)).toFixed(2)} GB`;
+// The keypad: what a key shows, and what it types.
+const keys: [string, string, string?][] = [
+  ["C", "clear", "fn"],
+  ["(", "("],
+  [")", ")"],
+  ["%", "%"],
+  ["⌫", "back", "fn"],
+  ["sin", "sin(", "sci"],
+  ["cos", "cos(", "sci"],
+  ["tan", "tan(", "sci"],
+  ["xʸ", "^", "sci"],
+  ["√", "sqrt(", "sci"],
+  ["7", "7"],
+  ["8", "8"],
+  ["9", "9"],
+  ["÷", "÷", "op"],
+  ["π", "π", "sci"],
+  ["4", "4"],
+  ["5", "5"],
+  ["6", "6"],
+  ["×", "×", "op"],
+  ["ln", "ln(", "sci"],
+  ["1", "1"],
+  ["2", "2"],
+  ["3", "3"],
+  ["−", "-", "op"],
+  ["lg", "lg(", "sci"],
+  ["0", "0"],
+  [".", "."],
+  ["Ans", "ans", "sci"],
+  ["+", "+", "op"],
+  ["=", "equals", "eq"],
+];
+
+// group puts thousands separators in a number as written by show.
+function group(s: string) {
+  if (s.includes("e")) return s;
+  const [i, f] = s.split(".");
+  return i!.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? "." + f : "");
+}
+
+function renderCalc(box: HTMLElement) {
+  let hist = loadHist();
+  let deg = (() => {
+    try {
+      return localStorage.getItem(degKey) !== "rad";
+    } catch {
+      return true;
+    }
+  })();
+  let ans = Number(hist[0]?.r ?? 0) || 0;
+  box.innerHTML = `
+    <div class="dv-calc">
+      <div class="dv-calc-main">
+        <div class="dv-calc-screen">
+          <input class="dv-calc-in" spellcheck="false" autocomplete="off" placeholder="输入算式，如 (3+4)×2^3、15%×80、0xff+1" />
+          <div class="dv-calc-r" title="点击复制">0</div>
+          <div class="dv-calc-alt muted"></div>
+        </div>
+        <div class="dv-keys">${keys.map(([label, v, kind]) => `<button data-k="${esc(v)}" class="${kind ?? "num"}">${label}</button>`).join("")}</div>
+        <div class="dv-bar dv-calc-opts"><span class="s-seg dv-deg"><button data-deg="1">角度</button><button data-deg="0">弧度</button></span><span class="l-spacer"></span><span class="muted dv-tip" title="${calcFunctions.join("、")}">回车计算，Esc 清空；还能用 mod、!、log(x, 底)、abs、round(x, 位数)、asin 等</span></div>
+      </div>
+      <div class="dv-calc-side">
+        <div class="dv-bar"><b>历史</b><span class="l-spacer"></span><button data-do="clear-hist">清空</button></div>
+        <div class="s-card dv-hist"></div>
+      </div>
+    </div>`;
+  const input = box.querySelector<HTMLInputElement>(".dv-calc-in")!;
+  const res = box.querySelector<HTMLElement>(".dv-calc-r")!;
+  const alt = box.querySelector<HTMLElement>(".dv-calc-alt")!;
+  const histEl = box.querySelector<HTMLElement>(".dv-hist")!;
+  input.value = kept.calc ?? "";
+  let result: number | null = null;
+  const drawHist = () => {
+    histEl.innerHTML = hist.length
+      ? hist.map((h, i) => `<div class="s-row dv-h" data-h="${i}" title="点击放回算式"><span class="muted">${esc(h.e)} =</span><b>${esc(group(h.r))}</b></div>`).join("")
+      : `<div class="s-row muted">按回车或 = 后算式记在这里</div>`;
+  };
+  const drawDeg = () => box.querySelectorAll<HTMLElement>(".dv-deg button").forEach((b) => b.classList.toggle("on", (b.dataset.deg === "1") === deg));
+  // work works the input out as it is typed; a slip shows in place of the
+  // result only once = is asked for.
+  const work = (strict = false) => {
+    kept.calc = input.value;
+    const e = input.value.trim();
+    res.classList.remove("bad");
+    if (!e) {
+      result = null;
+      res.textContent = "0";
+      alt.textContent = "";
+      return;
+    }
+    try {
+      result = tidy(calc(e, deg, ans));
+      const s = showNum(result);
+      res.textContent = group(s);
+      const forms: string[] = [];
+      if (Number.isSafeInteger(result) && result !== 0 && Math.abs(result) < 2 ** 53) {
+        const sign = result < 0 ? "-" : "";
+        const a = Math.abs(result);
+        forms.push(`十六进制 ${sign}0x${a.toString(16).toUpperCase()}`, `二进制 ${sign}0b${a.toString(2)}`, `八进制 ${sign}0o${a.toString(8)}`);
+      }
+      alt.textContent = forms.join("  ·  ");
+    } catch (err) {
+      result = null;
+      if (strict) {
+        res.classList.add("bad");
+        res.textContent = errorText(err);
+        alt.textContent = "";
+      } else alt.textContent = errorText(err);
+    }
+  };
+  const equals = () => {
+    work(true);
+    if (result === null) return;
+    const r = showNum(result);
+    const e = input.value.trim();
+    if (e !== r) {
+      hist = [{ e, r }, ...hist.filter((h) => h.e !== e)].slice(0, 50);
+      try {
+        localStorage.setItem(histKey, JSON.stringify(hist));
+      } catch {}
+      drawHist();
+    }
+    ans = result;
+    input.value = r;
+    kept.calc = r;
+    input.select();
+  };
+  // type puts text at the caret, in place of what is selected. A function
+  // or ( wraps the selection; after =, with the result selected, a sign
+  // goes on from it.
+  const type = (t: string) => {
+    let a = input.selectionStart ?? input.value.length;
+    const b = input.selectionEnd ?? a;
+    let text = t;
+    if (t.endsWith("(") && a !== b) text = t + input.value.slice(a, b) + ")";
+    else if (a === 0 && b === input.value.length && /^[-+×÷^%]$/.test(t)) a = b;
+    input.value = input.value.slice(0, a) + text + input.value.slice(b);
+    const at = a + text.length;
+    input.setSelectionRange(at, at);
+    work();
+  };
+  box.querySelector(".dv-keys")!.addEventListener("click", (e) => {
+    const k = (e.target as HTMLElement).closest<HTMLElement>("[data-k]")?.dataset.k;
+    if (!k) return;
+    input.focus();
+    if (k === "clear") (input.value = ""), work();
+    else if (k === "back") {
+      const a = input.selectionStart ?? input.value.length;
+      const b = input.selectionEnd ?? a;
+      const x = a === b ? Math.max(0, a - 1) : a;
+      input.value = input.value.slice(0, x) + input.value.slice(b);
+      input.setSelectionRange(x, x);
+      work();
+    } else if (k === "equals") equals();
+    else type(k);
+  });
+  input.addEventListener("input", () => work());
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || (e.key === "=" && !e.shiftKey)) {
+      e.preventDefault();
+      equals();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      input.value = "";
+      work();
+    }
+  });
+  res.addEventListener("click", () => result !== null && copy(showNum(result), `已复制 ${showNum(result)}`));
+  histEl.addEventListener("click", (e) => {
+    const h = hist[Number((e.target as HTMLElement).closest<HTMLElement>("[data-h]")?.dataset.h)];
+    if (!h) return;
+    input.value = h.e;
+    input.focus();
+    work();
+  });
+  box.querySelector('[data-do="clear-hist"]')!.addEventListener("click", () => {
+    hist = [];
+    try {
+      localStorage.removeItem(histKey);
+    } catch {}
+    drawHist();
+  });
+  box.querySelector(".dv-deg")!.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-deg]");
+    if (!b) return;
+    deg = b.dataset.deg === "1";
+    try {
+      localStorage.setItem(degKey, deg ? "deg" : "rad");
+    } catch {}
+    drawDeg();
+    work();
+  });
+  drawDeg();
+  drawHist();
+  work();
+  input.focus();
 }
 
 // ---- QR codes ----
@@ -555,14 +749,14 @@ function showFound(box: HTMLElement, r: DevQRResult) {
 
 function renderGen(box: HTMLElement) {
   box.innerHTML = `
-    <div class="dv-bar"><b>UUID</b><span class="l-spacer"></span><label class="dv-opt">个数<select class="dv-n"><option>1</option><option>5</option><option>10</option><option>50</option></select></label><label class="dv-opt"><input type="checkbox" class="dv-upper" /> 大写</label><label class="dv-opt"><input type="checkbox" class="dv-nodash" /> 去掉横线</label><button data-do="uuid" class="primary">生成</button><button data-do="copy-uuid">复制</button></div>
+    <div class="dv-bar"><b>UUID</b><span class="l-spacer"></span><label class="dv-opt">个数<input type="number" class="dv-n" min="1" max="1000" value="1" /></label><label class="dv-opt"><input type="checkbox" class="dv-upper" /> 大写</label><label class="dv-opt"><input type="checkbox" class="dv-nodash" /> 去掉横线</label><button data-do="uuid" class="primary">生成</button><button data-do="copy-uuid">复制</button></div>
     <textarea class="dv-text dv-short dv-uuid" readonly spellcheck="false"></textarea>
     <div class="dv-bar"><b>随机密码</b><span class="l-spacer"></span><label class="dv-opt">长度<input type="number" class="dv-len" min="4" max="128" value="20" /></label><label class="dv-opt"><input type="checkbox" class="dv-sym" checked /> 符号</label><label class="dv-opt"><input type="checkbox" class="dv-amb" checked /> 去掉易混字符</label><button data-do="pw" class="primary">生成</button><button data-do="copy-pw">复制</button></div>
     <input class="l-search dv-pw" readonly spellcheck="false" />
     <p class="muted dv-tip">都用浏览器的安全随机数（crypto）生成，不经过网络。</p>`;
   const q = <T extends HTMLElement>(s: string) => box.querySelector<T>(s)!;
   const uuid = () => {
-    const n = Number(q<HTMLSelectElement>(".dv-n").value);
+    const n = Math.min(Math.max(Math.floor(Number(q<HTMLInputElement>(".dv-n").value)) || 1, 1), 1000);
     q<HTMLTextAreaElement>(".dv-uuid").value = Array.from({ length: n }, () => {
       let u: string = crypto.randomUUID();
       if (q<HTMLInputElement>(".dv-nodash").checked) u = u.replace(/-/g, "");
@@ -589,7 +783,14 @@ function renderGen(box: HTMLElement) {
     else if (what === "copy-uuid") copy(q<HTMLTextAreaElement>(".dv-uuid").value);
     else if (what === "copy-pw") copy(q<HTMLInputElement>(".dv-pw").value);
   });
-  box.querySelectorAll("select, input[type=checkbox]").forEach((el) => el.addEventListener("change", () => (el.closest(".dv-bar")!.querySelector('[data-do="pw"]') ? pw() : uuid())));
+  box.querySelectorAll("input").forEach((el) => {
+    if (el.readOnly) return;
+    el.addEventListener(el.type === "number" ? "input" : "change", () => (el.closest(".dv-bar")!.querySelector('[data-do="pw"]') ? pw() : uuid()));
+  });
+  // A count kept between visits.
+  const n = q<HTMLInputElement>(".dv-n");
+  n.value = kept.uuidN ?? "1";
+  n.addEventListener("input", () => (kept.uuidN = n.value));
   uuid();
   pw();
 }

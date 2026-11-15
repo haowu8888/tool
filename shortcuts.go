@@ -19,6 +19,7 @@ var shortcutActions = []struct{ id, action, keys string }{
 	{"shot", "截图", "CmdOrCtrl+Alt+A"},
 	{"shotTranslate", "截图翻译", "CmdOrCtrl+Alt+T"},
 	{"clipboard", "剪贴板历史", "CmdOrCtrl+Alt+V"},
+	{"record", "开始 / 停止录屏", "CmdOrCtrl+Alt+R"},
 }
 
 // Hotkeys registers the global shortcuts as the settings say, and again

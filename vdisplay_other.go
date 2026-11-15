@@ -14,8 +14,16 @@ func (v *virtualSwitch) restore() {}
 
 func (v *virtualSwitch) broken() bool { return false }
 
+func (v *virtualSwitch) hold() error { return errWindowsOnly }
+
+func heldByRustDesk() bool { return false }
+
+func rustdeskConnected() bool { return false }
+
 func restoreDisplaysLeftOver() {}
 
 func rescueDisplays() (bool, error) { return false, nil }
 
 func listDisplays() []DisplayInfo { return nil }
+
+func describeDisplays() string { return "" }

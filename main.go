@@ -2,7 +2,10 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"log"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -11,6 +14,11 @@ import (
 //go:embed assets/tray.png
 var trayIcon []byte
 
+// appQuitting is set once the app starts to quit. The windows kept hidden
+// for the next time, which turn their closing into hiding, close then:
+// one that refuses cancels the quit.
+var appQuitting atomic.Bool
+
 func main() {
 	// One instance only: a second one would write its own copy of the data
 	// files over the first's, and bring back displays the first detached.
@@ -18,8 +26,9 @@ func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
+	logToFile()
 
-	virtual := &VirtualScreen{}
+	virtual := NewVirtualScreen()
 	launcher := &Launcher{}
 	hotkeys := &Hotkeys{}
 	settings := &Settings{hotkeys: hotkeys}
@@ -30,6 +39,8 @@ func main() {
 	monitor := &Monitor{settings: settings}
 	overlay := &Overlay{settings: settings, monitor: monitor}
 	shot := &Shot{settings: settings}
+	record := &Record{shot: shot, settings: settings}
+	shot.rec = record
 	clips := &Clips{settings: settings}
 	services := &Services{}
 	flow := &Flow{}
@@ -44,6 +55,7 @@ func main() {
 	mygo.Bind(monitor)
 	mygo.Bind(overlay)
 	mygo.Bind(shot)
+	mygo.Bind(record)
 	mygo.Bind(clips)
 	mygo.Bind(services)
 	mygo.Bind(flow)
@@ -63,7 +75,10 @@ func main() {
 	// The displays the virtual display replaced come back however the app
 	// ends, and after a crash with the next launch.
 	restoreDisplaysLeftOver()
-	mygo.App.OnQuit(func() { virtual.stop() })
+	mygo.App.OnQuit(func() {
+		virtual.stop(nil)
+		record.quit()
+	})
 
 	mygo.App.WhenReady(func() {
 		// Started at login, it waits in the tray if the user wants so.
@@ -104,10 +119,9 @@ func main() {
 		// Closing hides the window to the tray, so that the shortcuts and
 		// the tray keep working, unless the user chose to quit. The tray's
 		// Quit, which closes every window too, ends the app.
-		quitting := false
-		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting = true })
+		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { appQuitting.Store(true) })
 		win.OnClose(func(e *mygo.CloseEvent) {
-			if !quitting {
+			if !appQuitting.Load() {
 				e.PreventDefault()
 				win.Hide()
 				launcher.unsummon()
@@ -146,6 +160,13 @@ func main() {
 			launcher.unsummon()
 			raise()
 		}
+		virtual.show = showWindow
+		// Locked with the physical displays detached, the computer shows
+		// nobody where to sign in, and the shortcut is off: its own
+		// keyboard or mouse bring them back.
+		virtual.idle = mygo.Power.IdleTime
+		mygo.Power.OnLockScreen(func() { virtual.setLocked(true) })
+		mygo.Power.OnUnlockScreen(func() { virtual.setLocked(false) })
 		launcher.hideWindow = win.Hide
 		// Started again, as from the Start menu while it waits in the tray.
 		mygo.App.OnSecondInstance(func([]string, string) { showWindow() })
@@ -174,6 +195,23 @@ func main() {
 					shot.start(mode, false)
 				}()
 			}}
+		}
+		// Screen recording: the shortcut selects a region, or stops the
+		// recording going on.
+		record.main = win
+		hotkeys.handle("record", func() { go record.toggle() })
+		recordItem := &mygo.MenuItem{Label: "录屏", Click: func(*mygo.MenuItem, *mygo.Window) {
+			go func() {
+				time.Sleep(250 * time.Millisecond)
+				record.toggle()
+			}()
+		}}
+		record.onChange = func(on bool) {
+			if on {
+				recordItem.SetLabel("停止录屏")
+			} else {
+				recordItem.SetLabel("录屏")
+			}
 		}
 		// The clipboard history: what is copied is kept, and the shortcut
 		// brings it up at the pointer, to paste an item where it was.
@@ -211,6 +249,10 @@ func main() {
 			if virtual.IsActive() {
 				label = "恢复物理屏"
 			}
+			recLabel := "录屏"
+			if record.IsRecording() {
+				recLabel = "停止录屏"
+			}
 			return mygo.NewMenu([]*mygo.MenuItem{
 				{Label: "打开工具箱", Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
 				{Label: "快捷启动", Click: func(*mygo.MenuItem, *mygo.Window) {
@@ -226,6 +268,7 @@ func main() {
 				shotItem("截图", ""),
 				shotItem("截图翻译", "translate"),
 				shotItem("识别二维码", "qr"),
+				{Label: recLabel, Click: recordItem.Click},
 				mygo.Separator(),
 				{Label: label, Click: virtualItem.Click},
 				mygo.Separator(),
@@ -252,8 +295,21 @@ func main() {
 		// or a monitor is unplugged, the floating windows go back where the
 		// settings have them, or onto a screen that is left. Changes come
 		// several in a row: one placing after they settle.
+		//
+		// Where a display's size or scale changed, they are made anew: a
+		// transparent window whose display changes its scale, as when the
+		// remote side picks another resolution for the virtual display,
+		// keeps a black box behind its page, whatever is done to it after.
 		displays := make(chan struct{}, 1)
+		var layout atomic.Value // the displays' sizes and scales the floating windows were made for
+		layout.Store(displayLayout())
+		var remake atomic.Bool
 		mygo.Screen.OnDisplaysChanged(func() {
+			// It may change and change back within the second.
+			if displayLayout() != layout.Load() {
+				remake.Store(true)
+			}
+			virtual.displaysChanged()
 			select {
 			case displays <- struct{}{}:
 			default:
@@ -268,6 +324,13 @@ func main() {
 				}
 				if len(mygo.Screen.Displays()) == 0 {
 					continue
+				}
+				if now := displayLayout(); now != layout.Load() || remake.Load() {
+					layout.Store(now)
+					remake.Store(false)
+					widget.remake()
+					overlay.remake()
+					reminder.remake()
 				}
 				s := settings.current()
 				widget.apply(s.Widget)
@@ -284,6 +347,7 @@ func main() {
 				virtualItem,
 				shotItem("截图", ""),
 				shotItem("截图翻译", "translate"),
+				recordItem,
 				{Label: "显示 / 隐藏监控悬浮窗", Click: func(*mygo.MenuItem, *mygo.Window) { go overlay.Toggle() }},
 				{Label: "打开工具箱", Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
 				mygo.Separator(),
@@ -301,4 +365,14 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// displayLayout tells the displays' sizes and scales, to see whether they
+// changed.
+func displayLayout() string {
+	var b strings.Builder
+	for _, d := range mygo.Screen.Displays() {
+		fmt.Fprintf(&b, "%dx%d@%g ", d.Bounds.Width, d.Bounds.Height, d.ScaleFactor)
+	}
+	return b.String()
 }

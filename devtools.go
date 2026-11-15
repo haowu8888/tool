@@ -2,20 +2,12 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
-	"hash"
-	"hash/crc32"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,20 +31,9 @@ type DevQRResult struct {
 	Error string   `json:"error,omitempty"`
 }
 
-// DevHashes are a text's or a file's digests, in hexadecimal.
-type DevHashes struct {
-	MD5    string `json:"md5"`
-	SHA1   string `json:"sha1"`
-	SHA256 string `json:"sha256"`
-	SHA512 string `json:"sha512"`
-	CRC32  string `json:"crc32"`
-	Size   int64  `json:"size"`
-	Name   string `json:"name,omitempty"` // a file's
-}
-
-// Dev is the developer's small tools that need Go: QR codes, digests, and
-// saving or copying a picture. The rest, as JSON and timestamps, is the
-// page's own.
+// Dev is the developer's small tools that need Go: QR codes, and saving or
+// copying a picture. The rest, as JSON, timestamps and the calculator, is
+// the page's own.
 type Dev struct {
 	mu   sync.Mutex
 	last *DevQRResult // a screen's QR code the page has not shown yet
@@ -217,45 +198,4 @@ func (d *Dev) SaveImage(data, name string) error {
 		path += ".png"
 	}
 	return os.WriteFile(path, b, 0o644)
-}
-
-// Hash digests a text, as UTF-8.
-func (d *Dev) Hash(text string) DevHashes {
-	h, _ := digest(strings.NewReader(text))
-	return h
-}
-
-// HashFile digests a file.
-func (d *Dev) HashFile(path string) (DevHashes, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return DevHashes{}, err
-	}
-	defer f.Close()
-	if st, err := f.Stat(); err == nil && st.IsDir() {
-		return DevHashes{}, errors.New("这是文件夹，要选文件")
-	}
-	h, err := digest(f)
-	h.Name = filepath.Base(path)
-	return h, err
-}
-
-// PickFile asks for a file to digest.
-func (d *Dev) PickFile() (DevHashes, error) {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Title: "选择要算哈希的文件"})
-	if err != nil || len(paths) == 0 {
-		return DevHashes{}, err
-	}
-	return d.HashFile(paths[0])
-}
-
-func digest(r io.Reader) (DevHashes, error) {
-	hs := []hash.Hash{md5.New(), sha1.New(), sha256.New(), sha512.New(), crc32.NewIEEE()}
-	w := make([]io.Writer, len(hs))
-	for i, h := range hs {
-		w[i] = h
-	}
-	n, err := io.Copy(io.MultiWriter(w...), r)
-	hx := func(i int) string { return hex.EncodeToString(hs[i].Sum(nil)) }
-	return DevHashes{MD5: hx(0), SHA1: hx(1), SHA256: hx(2), SHA512: hx(3), CRC32: hx(4), Size: n}, err
 }

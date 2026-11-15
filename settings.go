@@ -42,6 +42,8 @@ type AppSettings struct {
 	Shot ShotSettings `json:"shot"`
 	// Clipboard is the clipboard history's.
 	Clipboard ClipSettings `json:"clipboard"`
+	// Record is the screen recorder's.
+	Record RecordSettings `json:"record"`
 }
 
 // MonitorSettings are the system monitor's.
@@ -141,8 +143,9 @@ var defaultSettings = AppSettings{
 		SensorsURL: "http://127.0.0.1:8085",
 		Overlay:    OverlaySettings{Items: []string{"cpu", "cpuTemp", "mem", "gpu", "diskTemp", "net"}, Opacity: 0.9},
 	},
-	Shot:  ShotSettings{To: "auto", Engine: "auto"},
-	Tools: []ToolSetting{},
+	Shot:   ShotSettings{To: "auto", Engine: "auto"},
+	Record: RecordSettings{FPS: 30, Cursor: true, Sound: true},
+	Tools:  []ToolSetting{},
 }
 
 // Settings keeps the settings and applies them.
@@ -315,6 +318,9 @@ func normalize(s *AppSettings) {
 	s.Shortcuts = normalizeShortcuts(s.Shortcuts)
 	s.Reminder.AutoHide = min(max(s.Reminder.AutoHide, 0), 60)
 	normalizeClipSettings(&s.Clipboard)
+	if !slices.Contains([]int{15, 30, 60}, s.Record.FPS) {
+		s.Record.FPS = defaultSettings.Record.FPS
+	}
 	if !slices.Contains([]int{500, 1000, 2000, 5000}, s.Monitor.Interval) {
 		s.Monitor.Interval = defaultSettings.Monitor.Interval
 	}

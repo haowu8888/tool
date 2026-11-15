@@ -104,6 +104,19 @@ func (r *Reminder) flow(failed []FlowAlert, fresh bool) {
 	r.place()
 }
 
+// remake closes the bubble's window, for place to make another: after its
+// display changed its scale, the window keeps a black box behind its page.
+// It stays unfolded or folded away as it was.
+func (r *Reminder) remake() {
+	r.mu.Lock()
+	win := r.win
+	r.win = nil
+	r.mu.Unlock()
+	if win != nil {
+		win.Destroy()
+	}
+}
+
 // place shows the bubble beside the ball, on the side with room, or in the
 // work area's corner when the ball is hidden; or hides it.
 func (r *Reminder) place() {

@@ -123,6 +123,9 @@ type display struct {
 type virtualSwitch struct {
 	Added    bool      `json:"added"` // whether it plugged the virtual display in
 	Displays []display `json:"displays"`
+	// Size is the virtual display's resolution, which one plugged in anew
+	// gets again.
+	Size [2]uint32 `json:"size"`
 }
 
 // switchToVirtual moves the desktop to a virtual display and detaches the
@@ -139,6 +142,7 @@ func switchToVirtual() (*virtualSwitch, error) {
 	}
 	v := &virtualSwitch{}
 	if count(displays, true) == 0 {
+		before := displays
 		if err := plugMonitor(true); err != nil {
 			return nil, fmt.Errorf("插入虚拟显示器失败（需要 RustDesk 自带的 usbmmidd 驱动）：%w", err)
 		}
@@ -154,42 +158,76 @@ func switchToVirtual() (*virtualSwitch, error) {
 				return nil, err
 			}
 		}
+		// Windows may detach the physical displays the moment the virtual
+		// one is in, by the layout it remembers for them together: they
+		// are kept as they were before, for restore.
+		now := displays
+		displays = append([]display(nil), before...)
+		for _, d := range now {
+			if d.Virtual {
+				displays = append(displays, d)
+			}
+		}
 	}
 	v.Displays = displays
+	v.Size = virtualSize(displays)
+	log.Println("switch to the virtual display, now:", describeDisplays())
 	// A file remembers the displays, so that the next launch brings them
 	// back should the app end without restore.
 	if err := v.save(); err != nil {
 		v.unplug()
 		return nil, err
 	}
-	if err := v.apply(); err != nil {
+	if err := v.detach(displays, true); err != nil {
 		v.restore()
 		return nil, err
 	}
+	log.Println("switched to the virtual display:", describeDisplays())
 	return v, nil
 }
 
-// apply makes the first virtual display the primary one at the origin, at
-// the size of the primary physical display if it can, and detaches the
-// physical displays.
-func (v *virtualSwitch) apply() error {
-	var virt *display
-	size := [2]uint32{1920, 1080}
-	for i, d := range v.Displays {
-		if d.Virtual && virt == nil {
-			virt = &v.Displays[i]
+// virtualSize picks the virtual display's resolution: the primary physical
+// display's if it has it, else 1920×1080, which RustDesk gives it too, and
+// failing both the one it has, 1024×768 when just plugged in.
+func virtualSize(displays []display) [2]uint32 {
+	virt, want := "", [2]uint32{1920, 1080}
+	for _, d := range displays {
+		if d.Virtual && virt == "" {
+			virt = d.Name
 		}
 		if !d.Virtual && d.Primary {
 			m := d.mode()
-			size = [2]uint32{m.pelsWidth, m.pelsHeight}
+			want = [2]uint32{m.pelsWidth, m.pelsHeight}
 		}
+	}
+	for _, size := range [][2]uint32{want, {1920, 1080}} {
+		if hasMode(virt, size[0], size[1]) {
+			return size
+		}
+	}
+	return [2]uint32{}
+}
+
+// detach makes the first virtual display of the displays the primary one
+// at the origin, with resize at the switch's size, and detaches the
+// physical ones.
+func (v *virtualSwitch) detach(displays []display, resize bool) error {
+	var virt *display
+	for i, d := range displays {
+		if d.Virtual {
+			virt = &displays[i]
+			break
+		}
+	}
+	if virt == nil {
+		return errors.New("虚拟显示器没有出现")
 	}
 	m := virt.mode()
 	offX, offY := m.positionX, m.positionY
 	m.positionX, m.positionY = 0, 0
 	m.fields |= dmPosition
-	if hasMode(virt.Name, size[0], size[1]) {
-		m.pelsWidth, m.pelsHeight = size[0], size[1]
+	if resize && v.Size[0] > 0 && hasMode(virt.Name, v.Size[0], v.Size[1]) {
+		m.pelsWidth, m.pelsHeight = v.Size[0], v.Size[1]
 		m.fields |= dmPelsWidth | dmPelsHeight
 	}
 	// Windows 11 24H2 wants the new primary display set first, RustDesk
@@ -197,7 +235,7 @@ func (v *virtualSwitch) apply() error {
 	if err := changeDisplay(virt.Name, m, cdsUpdateRegistry|cdsNoReset|cdsSetPrimary); err != nil {
 		return err
 	}
-	for _, d := range v.Displays {
+	for _, d := range displays {
 		if d.Name == virt.Name {
 			continue
 		}
@@ -219,9 +257,64 @@ func (v *virtualSwitch) apply() error {
 	return changeDisplay("", nil, cdsReset)
 }
 
+// hold puts the desktop back on a virtual display with the physical ones
+// detached, after something else changed the displays under the switch:
+// RustDesk plugs every virtual display out when its last session ends, the
+// one of this app too, and Windows then lights the physical displays.
+func (v *virtualSwitch) hold() error {
+	log.Println("hold the virtual display, now:", describeDisplays())
+	displays, err := activeDisplays()
+	if err != nil {
+		return err
+	}
+	fresh := false
+	if count(displays, true) == 0 {
+		if err := plugMonitor(true); err != nil {
+			return fmt.Errorf("插入虚拟显示器失败：%w", err)
+		}
+		v.Added, fresh = true, true
+		for start := time.Now(); count(displays, true) == 0; {
+			if time.Since(start) > 5*time.Second {
+				return errors.New("虚拟显示器没有出现")
+			}
+			time.Sleep(200 * time.Millisecond)
+			if displays, err = activeDisplays(); err != nil {
+				return err
+			}
+		}
+	}
+	// A physical display the switch has not seen, as a monitor plugged in
+	// meanwhile, comes back with the others.
+	for _, d := range displays {
+		if !d.Virtual && !v.knows(d.Name) {
+			d.Primary = false
+			v.Displays = append(v.Displays, d)
+		}
+	}
+	if err := v.save(); err != nil {
+		log.Println("save the displays:", err)
+	}
+	if err := v.detach(displays, fresh); err != nil {
+		return err
+	}
+	log.Println("held the virtual display:", describeDisplays())
+	return nil
+}
+
+func (v *virtualSwitch) knows(name string) bool {
+	for _, d := range v.Displays {
+		if d.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // restore brings the displays back as they were and unplugs the virtual
 // display it plugged in.
 func (v *virtualSwitch) restore() {
+	log.Println("restore displays, now:", describeDisplays())
+	defer func() { log.Println("restored displays:", describeDisplays()) }()
 	for _, d := range v.Displays {
 		flags := uint32(cdsUpdateRegistry | cdsNoReset)
 		if d.Primary {
@@ -241,45 +334,124 @@ func (v *virtualSwitch) restore() {
 	// be plugged out", leaving the screen dark. So, while the virtual
 	// display is still in, the physical displays are attached for sure and
 	// that layout is saved.
-	if !waitPhysical(2 * time.Second) {
-		setDisplayConfig.Call(0, 0, 0, 0, sdcApply|sdcTopologyExtend)
+	// With the virtual display gone already, as after RustDesk plugged it
+	// out, one is plugged in for that.
+	if displays, err := activeDisplays(); err == nil && count(displays, true) == 0 && plugMonitor(true) == nil {
+		v.Added = true
+		for start := time.Now(); time.Since(start) < 3*time.Second; time.Sleep(200 * time.Millisecond) {
+			if displays, err := activeDisplays(); err == nil && count(displays, true) > 0 {
+				break
+			}
+		}
 	}
-	if waitPhysical(3 * time.Second) {
+	if lightPhysical(2 * time.Second) {
 		if err := saveDisplayConfig(); err != nil {
 			log.Println("save display layout:", err)
 		}
 	}
 	v.unplug()
-	// Should no physical display be back, extend the desktop over all of
-	// them, as Win+P does.
-	if !waitPhysical(3 * time.Second) {
-		setDisplayConfig.Call(0, 0, 0, 0, sdcApply|sdcTopologyExtend)
+	if !lightPhysical(3 * time.Second) {
+		log.Println("restore displays: no physical display came back")
 	}
 	if p, err := switchFile(); err == nil {
 		os.Remove(p)
 	}
 }
 
+// lightPhysical waits for a physical display to show and, when none does,
+// brings them back: the desktop extended over all the displays, as Win+P
+// does, failing that the laptop's own screen only, and at last every
+// output with a monitor attached by its own settings. It reports whether a
+// physical display shows.
+func lightPhysical(wait time.Duration) bool {
+	if waitPhysical(wait) {
+		return true
+	}
+	for _, topology := range []uintptr{sdcTopologyExtend, sdcTopologyInternal} {
+		r, _, _ := setDisplayConfig.Call(0, 0, 0, 0, sdcApply|topology)
+		log.Printf("no physical display shows: SetDisplayConfig(%#x) = %d", topology, int32(r))
+		if waitPhysical(3 * time.Second) {
+			return true
+		}
+	}
+	attachPhysical()
+	return waitPhysical(3 * time.Second)
+}
+
+// attachPhysical attaches the outputs with a physical monitor on them to
+// the desktop, at the monitor's largest resolution, the first of them as
+// the primary display at the origin and the others to its right. Windows
+// lists a laptop's screen under several outputs: the first that takes it.
+func attachPhysical() {
+	x := int32(0)
+	attached := map[string]bool{} // by the monitor's device ID
+	for i := uint32(0); ; i++ {
+		dd := displayDevice{cb: uint32(unsafe.Sizeof(displayDevice{}))}
+		if r, _, _ := enumDisplayDevices.Call(0, uintptr(i), uintptr(unsafe.Pointer(&dd)), 0); r == 0 {
+			break
+		}
+		if dd.stateFlags&displayDeviceMirror != 0 || strings.HasPrefix(syscall.UTF16ToString(dd.deviceString[:]), virtualDeviceString) {
+			continue
+		}
+		md := displayDevice{cb: uint32(unsafe.Sizeof(displayDevice{}))}
+		if r, _, _ := enumDisplayDevices.Call(uintptr(unsafe.Pointer(&dd.deviceName[0])), 0, uintptr(unsafe.Pointer(&md)), 0); r == 0 {
+			continue // no monitor on this output
+		}
+		id := syscall.UTF16ToString(md.deviceID[:])
+		if attached[id] {
+			continue
+		}
+		name := syscall.UTF16ToString(dd.deviceName[:])
+		var best devMode
+		for j := uint32(0); ; j++ {
+			m := devMode{size: uint16(unsafe.Sizeof(devMode{}))}
+			if r, _, _ := enumDisplaySettingsEx.Call(uintptr(unsafe.Pointer(&dd.deviceName[0])), uintptr(j), uintptr(unsafe.Pointer(&m)), 0); r == 0 {
+				break
+			}
+			if a, b := uint64(m.pelsWidth)*uint64(m.pelsHeight), uint64(best.pelsWidth)*uint64(best.pelsHeight); a > b || a == b && m.displayFrequency > best.displayFrequency {
+				best = m
+			}
+		}
+		if best.pelsWidth == 0 {
+			continue
+		}
+		best.positionX, best.positionY = x, 0
+		best.fields |= dmPosition | dmPelsWidth | dmPelsHeight
+		flags := uint32(cdsUpdateRegistry | cdsNoReset)
+		if x == 0 {
+			flags |= cdsSetPrimary
+		}
+		err := changeDisplay(name, &best, flags)
+		log.Printf("attach %s at %dx%d: %v", name, best.pelsWidth, best.pelsHeight, err)
+		if err == nil {
+			attached[id] = true
+			x += int32(best.pelsWidth)
+		}
+	}
+	if x == 0 {
+		return
+	}
+	if err := changeDisplay("", nil, 0); err != nil {
+		log.Println("attach the physical displays:", err)
+	}
+}
+
 // rescueDisplays brings the physical displays back when none shows though
 // this app did not detach them: a virtual display left over, by RustDesk
 // or by a layout Windows remembered, has the whole desktop and the screen
-// is dark. It attaches the physical displays, saves that layout and
-// unplugs the virtual displays. It reports false when a physical display
-// shows, so there is nothing to rescue.
+// is dark, or no display is left at all, as after RustDesk plugged the
+// virtual display out while the physical ones were detached. It attaches
+// the physical displays, saves that layout and unplugs the virtual
+// displays. It reports false when a physical display shows, so there is
+// nothing to rescue.
 func rescueDisplays() (bool, error) {
 	displays, err := activeDisplays()
-	if err != nil || count(displays, false) > 0 || count(displays, true) == 0 {
+	if err != nil || count(displays, false) > 0 {
 		return false, err
 	}
-	log.Println("no physical display shows: bringing them back")
-	// Extend over all displays; failing that, the laptop's own screen only.
-	for _, topology := range []uintptr{sdcTopologyExtend, sdcTopologyInternal} {
-		setDisplayConfig.Call(0, 0, 0, 0, sdcApply|topology)
-		if waitPhysical(3 * time.Second) {
-			break
-		}
-	}
-	if !waitPhysical(0) {
+	log.Println("no physical display shows: bringing them back, now:", describeDisplays())
+	defer func() { log.Println("rescued displays:", describeDisplays()) }()
+	if !lightPhysical(0) {
 		return true, errors.New("没能点亮物理显示器")
 	}
 	if err := saveDisplayConfig(); err != nil {
@@ -293,8 +465,90 @@ func rescueDisplays() (bool, error) {
 			}
 		}
 	}
-	waitPhysical(3 * time.Second)
+	if !lightPhysical(3 * time.Second) {
+		return true, errors.New("拔掉虚拟显示器后物理显示器没有亮")
+	}
 	return true, nil
+}
+
+// heldByRustDesk reports whether no physical display shows while a virtual
+// one has the desktop and someone is connected through RustDesk: its
+// privacy mode, mostly, which is not this app's to end.
+func heldByRustDesk() bool {
+	displays, err := activeDisplays()
+	return err == nil && count(displays, false) == 0 && count(displays, true) > 0 && rustdeskConnected()
+}
+
+var (
+	ntdll                     = syscall.NewLazyDLL("ntdll.dll")
+	ntQueryInformationProcess = ntdll.NewProc("NtQueryInformationProcess")
+)
+
+const (
+	processQueryLimited    = 0x1000
+	processCommandLineInfo = 60
+)
+
+// rustdeskConnected reports whether someone controls this computer through
+// RustDesk: its connection manager, rustdesk.exe --cm, runs as the user
+// for as long as a session is connected.
+func rustdeskConnected() bool {
+	for _, cmd := range processCommandLines("rustdesk.exe") {
+		if strings.Contains(cmd, "--cm") {
+			return true
+		}
+	}
+	return false
+}
+
+// processCommandLines returns the command lines of the processes of a
+// program, those it may read: the user's own.
+func processCommandLines(exe string) []string {
+	snap, err := syscall.CreateToolhelp32Snapshot(syscall.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil
+	}
+	defer syscall.CloseHandle(snap)
+	var lines []string
+	e := syscall.ProcessEntry32{Size: uint32(unsafe.Sizeof(syscall.ProcessEntry32{}))}
+	for err := syscall.Process32First(snap, &e); err == nil; err = syscall.Process32Next(snap, &e) {
+		if !strings.EqualFold(syscall.UTF16ToString(e.ExeFile[:]), exe) {
+			continue
+		}
+		if cmd, ok := processCommandLine(e.ProcessID); ok {
+			lines = append(lines, cmd)
+		}
+	}
+	return lines
+}
+
+func processCommandLine(pid uint32) (string, bool) {
+	h, err := syscall.OpenProcess(processQueryLimited, false, pid)
+	if err != nil {
+		return "", false
+	}
+	defer syscall.CloseHandle(h)
+	// A UNICODE_STRING, and the text it points to after it.
+	buf := make([]byte, 8192)
+	for range 4 {
+		var n uint32
+		r, _, _ := ntQueryInformationProcess.Call(uintptr(h), processCommandLineInfo, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(unsafe.Pointer(&n)))
+		if r == 0 {
+			us := (*struct {
+				length, max uint16
+				text        *uint16
+			})(unsafe.Pointer(&buf[0]))
+			if us.text == nil {
+				return "", true
+			}
+			return syscall.UTF16ToString(unsafe.Slice(us.text, us.length/2)), true
+		}
+		if int(n) <= len(buf) {
+			break
+		}
+		buf = make([]byte, n)
+	}
+	return "", false
 }
 
 // waitPhysical waits up to timeout for a physical display to show and
@@ -339,10 +593,24 @@ func saveDisplayConfig() error {
 }
 
 // broken reports whether the displays changed under it: the virtual display
-// is gone or a physical one is attached again.
+// is gone or a physical one is attached again. While they are as it left
+// them, it keeps the virtual display's resolution, which the remote side
+// may have changed, for the one hold plugs in.
 func (v *virtualSwitch) broken() bool {
 	displays, err := activeDisplays()
-	return err == nil && (count(displays, true) == 0 || count(displays, false) > 0)
+	if err != nil {
+		return false
+	}
+	if count(displays, true) == 0 || count(displays, false) > 0 {
+		return true
+	}
+	for _, d := range displays {
+		if d.Primary {
+			m := d.mode()
+			v.Size = [2]uint32{m.pelsWidth, m.pelsHeight}
+		}
+	}
+	return false
 }
 
 func (v *virtualSwitch) unplug() {
@@ -439,6 +707,35 @@ func activeDisplays() ([]display, error) {
 		})
 	}
 	return displays, nil
+}
+
+// describeDisplays tells, for the log, every display attached to the
+// desktop with its mode, the detached 0×0 ones too.
+func describeDisplays() string {
+	var b strings.Builder
+	for i := uint32(0); ; i++ {
+		dd := displayDevice{cb: uint32(unsafe.Sizeof(displayDevice{}))}
+		if r, _, _ := enumDisplayDevices.Call(0, uintptr(i), uintptr(unsafe.Pointer(&dd)), 0); r == 0 {
+			break
+		}
+		if dd.stateFlags&displayDeviceActive == 0 || dd.stateFlags&displayDeviceMirror != 0 {
+			continue
+		}
+		m := devMode{size: uint16(unsafe.Sizeof(devMode{}))}
+		enumDisplaySettingsEx.Call(uintptr(unsafe.Pointer(&dd.deviceName[0])), enumCurrentSettings, uintptr(unsafe.Pointer(&m)), 0)
+		kind := "physical"
+		if strings.HasPrefix(syscall.UTF16ToString(dd.deviceString[:]), virtualDeviceString) {
+			kind = "virtual"
+		}
+		if dd.stateFlags&displayDevicePrimary != 0 {
+			kind += " primary"
+		}
+		fmt.Fprintf(&b, "[%s %s %dx%d@%d,%d] ", strings.TrimPrefix(syscall.UTF16ToString(dd.deviceName[:]), `\\.\`), kind, m.pelsWidth, m.pelsHeight, m.positionX, m.positionY)
+	}
+	if b.Len() == 0 {
+		return "none"
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // listDisplays lists the monitors of every output, attached to the desktop

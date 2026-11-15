@@ -71,6 +71,8 @@ export interface AppSettings {
   shot: ShotSettings;
   /** Clipboard is the clipboard history's. */
   clipboard: ClipSettings;
+  /** Record is the screen recorder's. */
+  record: RecordSettings;
 }
 
 /** BatterySample is the battery's charge and health. */
@@ -138,18 +140,6 @@ export interface ClipSettings {
    * history shows them: WindowsTerminal, KeePass.
    */
   exclude: string[];
-}
-
-/** DevHashes are a text's or a file's digests, in hexadecimal. */
-export interface DevHashes {
-  md5: string;
-  sha1: string;
-  sha256: string;
-  sha512: string;
-  crc32: string;
-  size: number;
-  /** a file's */
-  name?: string;
 }
 
 /**
@@ -525,6 +515,51 @@ export interface ProcessSample {
   pids: number[];
 }
 
+/** RecordFile is a saved recording, for the tool's list. */
+export interface RecordFile {
+  path: string;
+  name: string;
+  size: number;
+  /** when it was saved, ms since 1970 */
+  time: number;
+  /** ms, 0 when unknown */
+  duration: number;
+  /** to play it in the page */
+  url: string;
+}
+
+/** RecordSettings are the screen recorder's. */
+export interface RecordSettings {
+  /** frames a second: 15, 30 or 60 */
+  fps: number;
+  /** the pointer is in the video */
+  cursor: boolean;
+  /** what the speakers play */
+  sound: boolean;
+  mic: boolean;
+  /** Dir is where the videos go; empty for 视频\工具箱录屏. */
+  dir: string;
+}
+
+/**
+ * RecordState is the recording, for its panel: state is idle,
+ * recording, paused, saving, done or failed.
+ */
+export interface RecordState {
+  state: string;
+  /** Elapsed is how long it has recorded, without the pauses, in ms. */
+  elapsed: number;
+  path: string;
+  name: string;
+  /** of the saved file */
+  size: number;
+  width: number;
+  height: number;
+  /** what did not go as asked, as the sound */
+  note: string;
+  error: string;
+}
+
 /** ReminderSettings are the reminder bubble's. */
 export interface ReminderSettings {
   /**
@@ -840,7 +875,10 @@ export interface WidgetSettings {
  * VirtualScreen works like RustDesk's privacy mode 2: the desktop moves to
  * a virtual display and the physical displays are detached, so their
  * screens get no signal at all, while screen capture, and so remote
- * desktop tools, see and work the virtual display.
+ * desktop tools, see and work the virtual display. It stays so until the
+ * user turns it off: when something else changes the displays under it, as
+ * RustDesk does when its session ends, it detaches the physical displays
+ * again.
  */
 export const VirtualScreen = {
   /**
@@ -875,8 +913,11 @@ export const VirtualScreen = {
   },
   /**
    * Toggle turns the virtual screen on or off. When it is off but no
-   * physical display shows, as when RustDesk left its virtual display with
-   * the physical ones detached, it brings them back instead.
+   * physical display shows, as when a virtual display was left with the
+   * physical ones detached or no display is left at all, it brings them back
+   * instead; unless RustDesk is connected, whose privacy mode it then is,
+   * mostly: the displays stay as they are and the page offers to bring the
+   * physical ones back.
    */
   toggle(): Promise<void> {
     return call("VirtualScreen.Toggle");
@@ -1304,6 +1345,10 @@ export const Shot = {
   ready(display: number, seq: number): Promise<void> {
     return call("Shot.Ready", display, seq);
   },
+  /** Record starts recording the selection on a display. */
+  record(display: number, sr: ShotRect): Promise<void> {
+    return call("Shot.Record", display, sr);
+  },
   /**
    * ResizePin fits a pinned picture's window to its page: zoomed, or with
    * the text panel. It grows from its top left, but stays on its screen.
@@ -1361,6 +1406,84 @@ export const Shot = {
    */
   translate(id: string, to: string): Promise<Translation> {
     return call("Shot.Translate", id, to);
+  },
+} as const;
+
+/**
+ * Record records a region of the screen, selected as a screenshot is,
+ * into an MP4: a red frame shows around the region and a small panel
+ * beside it, both left out of the video.
+ */
+export const Record = {
+  /** Close closes the panel: a recording going on is saved first. */
+  close(): Promise<void> {
+    return call("Record.Close");
+  },
+  /** Copy puts a video on the clipboard as a file, to paste into a chat. */
+  copy(path: string): Promise<void> {
+    return call("Record.Copy", path);
+  },
+  /** Delete moves a video to the recycle bin. */
+  delete(path: string): Promise<void> {
+    return call("Record.Delete", path);
+  },
+  /** Dir returns the recordings' folder. */
+  dir(): Promise<string> {
+    return call("Record.Dir");
+  },
+  /** DragPanel moves the panel with the pointer while the button is down. */
+  dragPanel(): Promise<void> {
+    return call("Record.DragPanel");
+  },
+  /** IsRecording is whether a recording is going on, or being saved. */
+  isRecording(): Promise<boolean> {
+    return call("Record.IsRecording");
+  },
+  /** List lists the videos in the recordings' folder, newest first. */
+  list(): Promise<RecordFile[]> {
+    return call("Record.List");
+  },
+  /** Open plays a video in the system's player. */
+  open(path: string): Promise<void> {
+    return call("Record.Open", path);
+  },
+  /** OpenDir shows the recordings' folder. */
+  openDir(): Promise<void> {
+    return call("Record.OpenDir");
+  },
+  /** Pause pauses the recording, or goes on. */
+  pause(on: boolean): Promise<void> {
+    return call("Record.Pause", on);
+  },
+  /** PickDir asks for another folder for the recordings. */
+  pickDir(): Promise<string> {
+    return call("Record.PickDir");
+  },
+  /**
+   * Ready shows the panel once its page is drawn, without taking the keys
+   * from the window being recorded.
+   */
+  ready(): Promise<void> {
+    return call("Record.Ready");
+  },
+  /** Reveal shows a video in its folder. */
+  reveal(path: string): Promise<void> {
+    return call("Record.Reveal", path);
+  },
+  /**
+   * Start selects a region to record, as the tool's page asks: the toolbox
+   * steps aside, and comes back at the end.
+   */
+  start(): Promise<void> {
+    return call("Record.Start");
+  },
+  /** State is the recording's, for its panel to start with. */
+  state(): Promise<RecordState> {
+    return call("Record.State");
+  },
+  /** Stop ends the recording and saves it, or throws it away. */
+  stop(discard: boolean): Promise<void> {
+    return call("Record.Stop", discard);
   },
 } as const;
 
@@ -1551,9 +1674,9 @@ export const Flow = {
 } as const;
 
 /**
- * Dev is the developer's small tools that need Go: QR codes, digests, and
- * saving or copying a picture. The rest, as JSON and timestamps, is the
- * page's own.
+ * Dev is the developer's small tools that need Go: QR codes, and saving or
+ * copying a picture. The rest, as JSON, timestamps and the calculator, is
+ * the page's own.
  */
 export const Dev = {
   /** CopyImage puts a PNG in base64 on the clipboard. */
@@ -1570,18 +1693,6 @@ export const Dev = {
   /** DecodeQRFile reads the QR codes of a picture file, as dropped. */
   decodeQRFile(path: string): Promise<DevQRResult> {
     return call("Dev.DecodeQRFile", path);
-  },
-  /** Hash digests a text, as UTF-8. */
-  hash(text: string): Promise<DevHashes> {
-    return call("Dev.Hash", text);
-  },
-  /** HashFile digests a file. */
-  hashFile(path: string): Promise<DevHashes> {
-    return call("Dev.HashFile", path);
-  },
-  /** PickFile asks for a file to digest. */
-  pickFile(): Promise<DevHashes> {
-    return call("Dev.PickFile");
   },
   /** QR makes a QR code of a text: a PNG in base64. */
   qr(text: string, size: number): Promise<string> {
@@ -1649,6 +1760,11 @@ export const events = {
    * use for the notes.
    */
   todoAlertsChanged: event<Todo[]>("todoAlertsChanged"),
+  /**
+   * RecordChanged tells the recording's panel, and the tool's page, what
+   * the recording is doing.
+   */
+  recordChanged: event<RecordState>("recordChanged"),
   /** ScrollShotChanged tells the long screenshot's panel how far it got. */
   scrollShotChanged: event<ScrollShotState>("scrollShotChanged"),
   /**

@@ -246,6 +246,7 @@ export function showShot(app: HTMLElement, display: number) {
       ${btn("undo", "撤销 (Ctrl+Z)", markIcons.undo, "sh-tool")}
       <span class="sh-sep"></span>
       ${btn("long", "长截图：框住要滚动的内容，往下滚动拼成一张", markIcons.long, "sh-tool")}
+      ${btn("record", "录屏：把这块区域录成视频 (R)", markIcons.record, "sh-tool sh-rec-tool")}
       ${btn("ocr", "识别文字", "文字")}
       ${btn("translate", "翻译 (T)", "翻译")}
       ${btn("pin", "贴在屏幕上 (P)", "贴图")}
@@ -253,6 +254,7 @@ export function showShot(app: HTMLElement, display: number) {
       <span class="sh-sep"></span>
       ${btn("cancel", "取消 (Esc)", "✕")}
       ${btn("copy", "复制 (Enter)", "✓ 复制", "primary")}
+      ${btn("record", "开始录制 (Enter)", "● 开始录制", "primary sh-rec-go")}
     </div>
     <div class="sh-opts" hidden>
       <span class="sh-sizes">${[0, 1, 2].map((i) => `<button data-size="${i}" title="${["细", "中", "粗"][i]}"><i></i></button>`).join("")}</span>
@@ -443,7 +445,17 @@ export function showShot(app: HTMLElement, display: number) {
     canvas.width = f.width;
     canvas.height = f.height;
     reset();
-    tip.textContent = f.mode === "translate" ? "框选要翻译的文字 · Esc 取消" : f.mode === "ocr" ? "框选要识别的文字 · Esc 取消" : f.mode === "qr" ? "框选二维码 · Esc 取消" : "拖动框选 · Esc 或右键取消";
+    tip.textContent =
+      f.mode === "translate"
+        ? "框选要翻译的文字 · Esc 取消"
+        : f.mode === "ocr"
+          ? "框选要识别的文字 · Esc 取消"
+          : f.mode === "qr"
+            ? "框选二维码 · Esc 取消"
+            : f.mode === "record"
+              ? "拖动框选要录制的区域，单击录整个屏幕 · Esc 取消"
+              : "拖动框选 · Esc 或右键取消";
+    bar.classList.toggle("rec", f.mode === "record");
     img.src = f.url;
     try {
       await img.decode();
@@ -501,6 +513,7 @@ export function showShot(app: HTMLElement, display: number) {
     render();
     try {
       if (action === "long") await Shot.scroll(display, r);
+      else if (action === "record") await Shot.record(display, r);
       else await Shot.finish(display, r, action, await layer(r));
     } catch (e) {
       busy = false;
@@ -616,14 +629,20 @@ export function showShot(app: HTMLElement, display: number) {
       if ("a" in m && Math.abs(m.b.x - m.a.x) < 3 && Math.abs(m.b.y - m.a.y) < 3) marks.pop();
       return render();
     }
-    if (!sel || sel.w < 3 || sel.h < 3) return reset();
+    const recording = frame?.mode === "record";
+    if (!sel || sel.w < 3 || sel.h < 3) {
+      if (!recording || kind !== "new") return reset();
+      // A click records the whole screen.
+      sel = { x: 0, y: 0, w: innerWidth, h: innerHeight };
+    }
     done = true;
     render();
-    // From 截图翻译 or 识别文字, the selection goes on at once.
-    if (kind === "new" && frame?.mode) void act(frame.mode);
+    // From 截图翻译 or 识别文字, the selection goes on at once; a recording
+    // starts when asked, after the region is set right.
+    if (kind === "new" && frame?.mode && !recording) void act(frame.mode);
   });
   app.addEventListener("dblclick", (e) => {
-    if (sel && done && !tool && inside(e.clientX, e.clientY, sel)) void act("copy");
+    if (sel && done && !tool && inside(e.clientX, e.clientY, sel)) void act(frame?.mode === "record" ? "record" : "copy");
   });
   app.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -643,13 +662,16 @@ export function showShot(app: HTMLElement, display: number) {
     }
     if (e.key === "Escape") return cancel();
     if (!sel || !done) return;
-    if (e.ctrlKey && k === "z") void act("undo");
+    if (frame.mode === "record") {
+      if (e.key === "Enter") void act("record");
+    } else if (e.ctrlKey && k === "z") void act("undo");
     else if (e.key === "Enter" || (e.ctrlKey && k === "c")) void act("copy");
     else if (e.ctrlKey && k === "s") {
       e.preventDefault();
       void act("save");
     } else if (!e.ctrlKey && k === "p") void act("pin");
     else if (!e.ctrlKey && k === "t") void act("translate");
+    else if (!e.ctrlKey && k === "r") void act("record");
     else if (e.key.startsWith("Arrow")) {
       // Arrows move the selection a pixel, with Shift ten.
       e.preventDefault();
@@ -666,7 +688,10 @@ export function showShot(app: HTMLElement, display: number) {
 
 export function showScrollFrame(app: HTMLElement) {
   document.documentElement.classList.add("scrollframe");
-  document.title = "长截图";
+  // The screen recording's frame is red.
+  const rec = new URLSearchParams(location.search).has("rec");
+  document.documentElement.classList.toggle("recframe", rec);
+  document.title = rec ? "录屏" : "长截图";
   app.innerHTML = `<div class="sf-border"></div>`;
 }
 

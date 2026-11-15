@@ -142,6 +142,7 @@ type Shot struct {
 	// restore shows the toolbox again, which a capture from its page hid.
 	restore bool
 	scroll  *scrollShot // a long screenshot going on
+	rec     *Record
 
 	settings *Settings
 	main     *mygo.Window
@@ -182,6 +183,16 @@ func (s *Shot) serve() {
 			s.mu.Unlock()
 			b, kind = s.scrollPreview(), "image/bmp"
 			s.mu.Lock()
+		} else if v, ok := strings.CutPrefix(name, "video/"); ok && s.rec != nil {
+			s.mu.Unlock()
+			// A recording, which the page plays: ranges, for seeking.
+			if p, ok := s.rec.serveVideo(v); ok {
+				w.Header().Set("Cache-Control", "no-store")
+				http.ServeFile(w, r, p)
+				return
+			}
+			http.NotFound(w, r)
+			return
 		} else if f, ok := strings.CutPrefix(name, "frame/"); ok {
 			display, _, _ := strings.Cut(f, "-")
 			n, _ := strconv.ParseInt(display, 10, 64)
@@ -282,6 +293,9 @@ func (s *Shot) start(mode string, fromPage bool) {
 		})
 		// Alt+F4 cancels, and the window stays for the next time.
 		win.OnClose(func(e *mygo.CloseEvent) {
+			if appQuitting.Load() {
+				return
+			}
 			e.PreventDefault()
 			go s.Cancel()
 		})
