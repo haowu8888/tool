@@ -1,10 +1,10 @@
 // The system monitor: the processor, memory, graphics, network, disks and
-// battery, live, their temperatures, the busiest programs, and what the
-// computer is.
+// battery, live, their temperatures, the busiest programs, the ports in
+// use and by whom, and what the computer is.
 import { icons } from "./icons";
-import { Monitor, Notes, Overlay, events, type MonitorSample, type ProcessSample, type SensorReading, type SystemInfo } from "./mygo";
+import { Monitor, Notes, Overlay, events, type MonitorSample, type PortEntry, type ProcessSample, type SensorReading, type SystemInfo } from "./mygo";
 import { onSettings, settings } from "./settings";
-import { errorText, esc, openDialog, showError, toast } from "./ui";
+import { errorText, esc, onLeave, openDialog, showError, toast } from "./ui";
 
 // history keeps the last minute or so of each card's number for its chart.
 const history: Record<string, number[]> = {};
@@ -29,6 +29,10 @@ export const monitorTool = {
       <section class="s-group m-wide"><h2>温度</h2><div class="s-card m-temps"></div><p class="muted s-tip m-temp-tip" hidden></p></section>
       <section class="s-group m-wide"><h2>磁盘空间</h2><div class="s-card m-disks"></div></section>
       <section class="s-group m-wide"><h2>占用最多的程序<span class="muted">（同名进程合在一起）</span></h2><div class="s-card m-procs"></div></section>
+      <section class="s-group m-wide m-ports-g">
+        <h2>端口占用<span class="muted m-ports-sum"></span><span class="l-spacer"></span><input class="m-port-q" type="search" placeholder="端口或程序名，如 8080" /><span class="s-seg m-port-mode"><button data-all="" class="on" title="正在监听的 TCP 端口和绑定的 UDP 端口">监听</button><button data-all="1" title="另外列出每条 TCP 连接">全部连接</button></span><button class="m-port-fold"></button></h2>
+        <div class="s-card m-ports"><div class="s-row muted">正在读取…</div></div>
+      </section>
       <section class="s-group m-wide"><h2>系统信息<span class="l-spacer"></span><button id="m-copy">复制全部</button><button id="m-refresh">刷新</button></h2><div class="s-card m-info"><div class="s-row muted">正在读取系统信息…</div></div></section>`;
     p.querySelector("#m-overlay")!.addEventListener("click", () => void Overlay.toggle());
     p.querySelector("#m-copy")!.addEventListener("click", () => void navigator.clipboard.writeText(infoText()).then(() => toast("已复制系统信息"), showError));
@@ -38,6 +42,7 @@ export const monitorTool = {
       const pr = b && drawnProcs[Number(b.dataset.i)];
       if (pr) confirmEnd(pr);
     });
+    bindPorts(p);
     renderOverlayButton();
     watch(true);
     if (lastSample) render(lastSample);
@@ -179,6 +184,128 @@ function morph(old: ParentNode, next: ParentNode) {
     } else if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue;
   });
   for (const o of was.slice(now.length)) old.removeChild(o);
+}
+
+// ---- The ports in use ----
+
+// The ports as last drawn: a row's buttons act on the one at its place.
+let drawnPorts: PortEntry[] = [];
+let ports: PortEntry[] = [];
+let allPorts = false;
+const portsShown = 500;
+const foldKey = "ports-folded";
+
+function bindPorts(p: HTMLElement) {
+  const box = p.querySelector<HTMLElement>(".m-ports")!;
+  const q = p.querySelector<HTMLInputElement>(".m-port-q")!;
+  const group = p.querySelector<HTMLElement>(".m-ports-g")!;
+  const fold = p.querySelector<HTMLButtonElement>(".m-port-fold")!;
+  const folded = () => group.classList.contains("folded");
+  const setFold = (on: boolean) => {
+    group.classList.toggle("folded", on);
+    fold.textContent = on ? "展开" : "收起";
+    fold.title = on ? "展开端口列表" : "收起端口列表，不再刷新";
+  };
+  try {
+    setFold(localStorage.getItem(foldKey) === "1");
+  } catch {
+    setFold(false);
+  }
+  fold.addEventListener("click", () => {
+    setFold(!folded());
+    try {
+      localStorage.setItem(foldKey, folded() ? "1" : "0");
+    } catch {}
+    if (!folded()) load();
+  });
+  // Folded, the list is read once, for the count, and not again.
+  const load = (force = false) => {
+    if (!box.isConnected || pressing || (folded() && !force)) return;
+    void Monitor.ports(allPorts).then((list) => {
+      ports = list ?? [];
+      renderPorts();
+    }, (e) => patch(box, `<div class="s-row s-bad">${esc(errorText(e))}</div>`));
+  };
+  q.addEventListener("input", renderPorts);
+  p.querySelectorAll<HTMLElement>(".m-port-mode button").forEach((b) =>
+    b.addEventListener("click", () => {
+      allPorts = !!b.dataset.all;
+      p.querySelectorAll(".m-port-mode button").forEach((o) => o.classList.toggle("on", o === b));
+      load();
+    }),
+  );
+  box.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-port]");
+    const pe = b && drawnPorts[Number(b.dataset.port)];
+    if (!pe) return;
+    if (b.dataset.act === "show") void Monitor.showProgram(pe.path ?? "").catch(showError);
+    else if (b.dataset.act === "pid") void navigator.clipboard.writeText(String(pe.pid)).then(() => toast(`已复制 PID ${pe.pid}`), showError);
+    else confirmEndPort(pe, load);
+  });
+  load(true);
+  const tick = setInterval(() => document.visibilityState === "visible" && load(), 5000);
+  onLeave(() => clearInterval(tick));
+}
+
+// where says a local address in words: every address, or this computer only.
+function where(addr: string) {
+  if (addr === "0.0.0.0" || addr === "::") return "所有地址";
+  if (addr.startsWith("127.") || addr === "::1") return "仅本机";
+  return addr;
+}
+
+function renderPorts() {
+  const p = panel;
+  const box = p?.querySelector<HTMLElement>(".m-ports");
+  if (!p || !box) return;
+  const q = p.querySelector<HTMLInputElement>(".m-port-q")!.value.trim().toLowerCase();
+  const num = /^\d+$/.test(q) ? Number(q) : 0;
+  const list = !q
+    ? ports
+    : num
+      ? ports.filter((e) => e.port === num || e.pid === num || e.remote?.endsWith(":" + q))
+      : ports.filter((e) => e.name.toLowerCase().includes(q) || (e.path ?? "").toLowerCase().includes(q) || (e.remote ?? "").includes(q));
+  const listening = ports.filter((e) => e.state === "LISTEN" || e.proto === "UDP");
+  p.querySelector(".m-ports-sum")!.textContent = `（${new Set(listening.map((e) => e.proto + e.port)).size} 个端口被占用${allPorts ? `，${ports.length - listening.length} 条连接` : ""}）`;
+  drawnPorts = list.slice(0, portsShown);
+  patch(
+    box,
+    drawnPorts.length
+      ? drawnPorts
+          .map(
+            (e, i) => `
+        <div class="s-row m-port">
+          <span class="m-port-no"><span class="m-port-proto">${e.proto}</span><b>${e.port}</b></span>
+          <span class="m-port-addr muted" title="${esc(e.local)}">${esc(where(e.local))}${e.remote ? ` → ${esc(e.remote)}` : ""}${e.state && e.state !== "LISTEN" ? ` <small>${e.state}</small>` : ""}</span>
+          <span class="m-port-prog" title="${esc(e.path || e.name)}">${esc(e.name || "（看不到）")}<small class="muted">PID ${e.pid}</small></span>
+          <span class="m-port-acts">
+            <button data-port="${i}" data-act="pid" title="复制 PID">PID</button>
+            ${e.path ? `<button data-port="${i}" data-act="show" title="在资源管理器里显示程序文件">位置</button>` : ""}
+            ${e.pid > 4 ? `<button data-port="${i}" data-act="end">结束</button>` : ""}
+          </span>
+        </div>`,
+          )
+          .join("") + (list.length > portsShown ? `<div class="s-row muted">还有 ${list.length - portsShown} 条，输入端口或程序名筛选</div>` : "")
+      : `<div class="s-row muted">${num ? `端口 ${num} 没被占用` : q ? "没有匹配的端口" : "正在读取…"}</div>`,
+  );
+}
+
+function confirmEndPort(e: PortEntry, done: () => void) {
+  const same = ports.filter((o) => o.pid === e.pid && (o.state === "LISTEN" || o.proto === "UDP")).map((o) => `${o.proto} ${o.port}`);
+  const dlg = openDialog(`
+    <h2>结束 ${esc(e.name || "PID " + e.pid)}？</h2>
+    <p>PID ${e.pid}，占用 ${esc([...new Set(same)].join("、") || `${e.proto} ${e.port}`)}。没保存的内容会丢失，系统服务结束了可能导致异常。</p>
+    <div class="l-buttons"><button data-close>取消</button><button class="primary danger-bg" id="m-kill">结束</button></div>`);
+  dlg.querySelector("#m-kill")!.addEventListener("click", async () => {
+    dlg.close();
+    try {
+      await Monitor.endProcesses([e.pid]);
+      toast(`已结束 ${e.name || e.pid}，端口 ${e.port} 已释放`);
+      setTimeout(done, 500);
+    } catch (err) {
+      showError(err);
+    }
+  });
 }
 
 // The programs as last drawn: a row's 结束 ends the one at its place.

@@ -33,6 +33,7 @@ func main() {
 	clips := &Clips{settings: settings}
 	services := &Services{}
 	flow := &Flow{}
+	dev := &Dev{shot: shot}
 	mygo.Bind(virtual)
 	mygo.Bind(launcher)
 	mygo.Bind(notes)
@@ -46,6 +47,7 @@ func main() {
 	mygo.Bind(clips)
 	mygo.Bind(services)
 	mygo.Bind(flow)
+	mygo.Bind(dev)
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()
@@ -198,6 +200,9 @@ func main() {
 		flow.onAlerts = reminder.flow
 		flow.open = func() { showTool("flow") }
 		go flow.watch()
+		// A QR code cut out of the screen shows in the dev tools.
+		dev.open = func() { showTool("dev") }
+		shot.onQR = dev.found
 		widget.onMove = func() { reminder.place() }
 		overlay.open = func() { showTool("monitor") }
 		go notes.watch()
@@ -220,6 +225,7 @@ func main() {
 				{Label: "显示 / 隐藏监控悬浮窗", Click: func(*mygo.MenuItem, *mygo.Window) { go overlay.Toggle() }},
 				shotItem("截图", ""),
 				shotItem("截图翻译", "translate"),
+				shotItem("识别二维码", "qr"),
 				mygo.Separator(),
 				{Label: label, Click: virtualItem.Click},
 				mygo.Separator(),

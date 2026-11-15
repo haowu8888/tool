@@ -443,7 +443,7 @@ export function showShot(app: HTMLElement, display: number) {
     canvas.width = f.width;
     canvas.height = f.height;
     reset();
-    tip.textContent = f.mode === "translate" ? "框选要翻译的文字 · Esc 取消" : f.mode === "ocr" ? "框选要识别的文字 · Esc 取消" : "拖动框选 · Esc 或右键取消";
+    tip.textContent = f.mode === "translate" ? "框选要翻译的文字 · Esc 取消" : f.mode === "ocr" ? "框选要识别的文字 · Esc 取消" : f.mode === "qr" ? "框选二维码 · Esc 取消" : "拖动框选 · Esc 或右键取消";
     img.src = f.url;
     try {
       await img.decode();

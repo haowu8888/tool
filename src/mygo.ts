@@ -140,6 +140,27 @@ export interface ClipSettings {
   exclude: string[];
 }
 
+/** DevHashes are a text's or a file's digests, in hexadecimal. */
+export interface DevHashes {
+  md5: string;
+  sha1: string;
+  sha256: string;
+  sha512: string;
+  crc32: string;
+  size: number;
+  /** a file's */
+  name?: string;
+}
+
+/**
+ * DevQRResult is what the QR codes of a picture say, or why nothing was
+ * read.
+ */
+export interface DevQRResult {
+  texts: string[];
+  error?: string;
+}
+
 /** DiskSample is a drive's space. */
 export interface DiskSample {
   /** C: */
@@ -472,6 +493,26 @@ export interface PinInfo {
   /** ocr or translate to do at once */
   mode: string;
   pad: number;
+}
+
+/**
+ * PortEntry is a port a process listens on or is bound to, or with all a
+ * TCP connection.
+ */
+export interface PortEntry {
+  /** TCP or UDP */
+  proto: string;
+  /** the local address: 0.0.0.0 and :: for every one */
+  local: string;
+  port: number;
+  /** a connection's other end, host:port */
+  remote?: string;
+  /** a TCP port's: LISTEN, ESTABLISHED… */
+  state?: string;
+  pid: number;
+  name: string;
+  /** empty when not ours to see, as a service's */
+  path?: string;
 }
 
 /** ProcessSample is the processes of a program together. */
@@ -1146,6 +1187,17 @@ export const Monitor = {
   last(): Promise<MonitorSample> {
     return call("Monitor.Last");
   },
+  /**
+   * Ports lists the ports listened on and bound, by port; with all, every
+   * TCP connection too.
+   */
+  ports(all: boolean): Promise<PortEntry[]> {
+    return call("Monitor.Ports", all);
+  },
+  /** ShowProgram shows a program's file in Explorer. */
+  showProgram(path: string): Promise<void> {
+    return call("Monitor.ShowProgram", path);
+  },
   /** Watch starts or stops a watcher; sampling runs while any watches. */
   watch(who: string, on: boolean): Promise<void> {
     return call("Monitor.Watch", who, on);
@@ -1295,8 +1347,8 @@ export const Shot = {
   },
   /**
    * Start takes a screenshot, as the toolbox's buttons ask: the toolbox
-   * steps aside for it. Mode is ocr or translate to do with the selection
-   * at once, or empty.
+   * steps aside for it. Mode is ocr, translate or qr to do with the
+   * selection at once, or empty.
    */
   start(mode: string): Promise<void> {
     return call("Shot.Start", mode);
@@ -1498,6 +1550,60 @@ export const Flow = {
   },
 } as const;
 
+/**
+ * Dev is the developer's small tools that need Go: QR codes, digests, and
+ * saving or copying a picture. The rest, as JSON and timestamps, is the
+ * page's own.
+ */
+export const Dev = {
+  /** CopyImage puts a PNG in base64 on the clipboard. */
+  copyImage(data: string): Promise<void> {
+    return call("Dev.CopyImage", data);
+  },
+  /**
+   * DecodeQR reads the QR codes of a picture: PNG, JPEG or GIF bytes in
+   * base64, as pasted.
+   */
+  decodeQR(data: string): Promise<DevQRResult> {
+    return call("Dev.DecodeQR", data);
+  },
+  /** DecodeQRFile reads the QR codes of a picture file, as dropped. */
+  decodeQRFile(path: string): Promise<DevQRResult> {
+    return call("Dev.DecodeQRFile", path);
+  },
+  /** Hash digests a text, as UTF-8. */
+  hash(text: string): Promise<DevHashes> {
+    return call("Dev.Hash", text);
+  },
+  /** HashFile digests a file. */
+  hashFile(path: string): Promise<DevHashes> {
+    return call("Dev.HashFile", path);
+  },
+  /** PickFile asks for a file to digest. */
+  pickFile(): Promise<DevHashes> {
+    return call("Dev.PickFile");
+  },
+  /** QR makes a QR code of a text: a PNG in base64. */
+  qr(text: string, size: number): Promise<string> {
+    return call("Dev.QR", text, size);
+  },
+  /** SaveImage asks where to save a PNG in base64. */
+  saveImage(data: string, name: string): Promise<void> {
+    return call("Dev.SaveImage", data, name);
+  },
+  /**
+   * ScanScreen cuts out a part of the screen and reads its QR codes, which
+   * the page gets with devQRFound.
+   */
+  scanScreen(): Promise<void> {
+    return call("Dev.ScanScreen");
+  },
+  /** TakeQR returns a screen's QR code the page has not shown, once. */
+  takeQR(): Promise<DevQRResult | null> {
+    return call("Dev.TakeQR");
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
@@ -1511,6 +1617,11 @@ export const events = {
   clipsChanged: event<ClipItem[]>("clipsChanged"),
   /** ClipsSummoned tells the history's popup that the shortcut brought it up. */
   clipsSummoned: event<number>("clipsSummoned"),
+  /**
+   * DevQRFound is sent with what a QR code cut out of the screen says, for
+   * the dev tools' page.
+   */
+  devQRFound: event<DevQRResult>("devQRFound"),
   /** FlowChanged is sent with the pipelines whenever they are fetched. */
   flowChanged: event<FlowState>("flowChanged"),
   /** FlowFocus asks the tool's page to show a run, as the bubble's 看日志. */

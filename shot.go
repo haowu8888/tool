@@ -145,6 +145,8 @@ type Shot struct {
 
 	settings *Settings
 	main     *mygo.Window
+	// onQR is told what the QR codes of a selection say, in mode qr.
+	onQR func(DevQRResult)
 }
 
 type shotFrame struct {
@@ -202,8 +204,8 @@ func (s *Shot) serve() {
 }
 
 // Start takes a screenshot, as the toolbox's buttons ask: the toolbox
-// steps aside for it. Mode is ocr or translate to do with the selection
-// at once, or empty.
+// steps aside for it. Mode is ocr, translate or qr to do with the
+// selection at once, or empty.
 func (s *Shot) Start(mode string) {
 	go s.start(mode, true)
 }
@@ -401,6 +403,11 @@ func (s *Shot) use(img *image.RGBA, d mygo.Display, rect image.Rectangle, action
 	switch action {
 	case "copy":
 		return copyImage(img)
+	case "qr":
+		if s.onQR != nil {
+			s.onQR(readQR(img))
+		}
+		return nil
 	case "save":
 		return s.save(img)
 	case "pin", "ocr", "translate":

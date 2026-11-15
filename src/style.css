@@ -5017,3 +5017,350 @@ a.fl-out-v:hover {
   line-height: 24px;
   cursor: pointer;
 }
+
+/* 系统监控：端口占用 */
+.m-port-q {
+  width: 180px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.m-port-q:focus {
+  border-color: var(--accent);
+}
+
+.m-wide h2 .m-port-mode button {
+  padding: 2px 10px;
+  border: 0;
+  background: none;
+}
+
+.m-wide h2 .m-port-mode button.on {
+  background: var(--card);
+  color: var(--accent);
+}
+
+.m-port {
+  gap: 12px;
+  min-height: 28px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  font-size: 13px;
+}
+
+.s-row > span.m-port-no {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: 92px;
+  font-variant-numeric: tabular-nums;
+}
+
+.m-port-proto {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.m-port-addr {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.m-port-prog {
+  flex: none;
+  width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.m-port-prog small {
+  margin-left: 6px;
+}
+
+.m-port-acts {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 140px;
+}
+
+.m-port-acts button {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.m-port-acts button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.m-port-acts button[data-act="end"]:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* 开发工具 */
+.dv-tabs {
+  width: fit-content;
+  margin: 10px 0 14px;
+}
+
+.dv-kinds {
+  flex-wrap: wrap;
+  width: fit-content;
+  margin-bottom: 10px;
+}
+
+.dv-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dv-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dv-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.dv-bar button,
+.dv-acts button:not(.primary),
+.dv-now button,
+.dv-conv button,
+.dv-hashes button,
+.dv-found button {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dv-bar button.primary {
+  padding: 4px 14px;
+  font-size: 12.5px;
+}
+
+.dv-bar button:not(.primary):hover,
+.dv-acts button:not(.primary):hover,
+.dv-now button:hover,
+.dv-conv button:hover,
+.dv-hashes button:hover,
+.dv-found button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dv-bar select,
+.dv-opt select,
+.dv-opt input[type="number"] {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+
+.dv-opt input[type="number"] {
+  width: 56px;
+}
+
+.dv-opt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.dv-text {
+  box-sizing: border-box;
+  width: 100%;
+  height: 340px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: var(--card);
+  color: inherit;
+  font: 12.5px/1.5 Consolas, "Cascadia Mono", "Microsoft YaHei", monospace;
+  resize: vertical;
+}
+
+.dv-text:focus {
+  border-color: var(--accent);
+}
+
+.dv-text.dv-short {
+  height: 110px;
+  margin-bottom: 8px;
+}
+
+.dv-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dv-acts .primary {
+  padding: 6px 16px;
+}
+
+.dv-msg {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dv-ok {
+  color: var(--ok);
+}
+
+.dv-bad {
+  color: #ef4444;
+}
+
+.dv-tip {
+  font-size: 12px;
+}
+
+.dv-now,
+.dv-conv,
+.dv-hashes {
+  max-width: 760px;
+}
+
+.dv-now b,
+.dv-conv b {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.dv-now .s-row > span:first-child,
+.dv-conv .s-row > span:first-child,
+.dv-hashes .s-row > span:first-child {
+  width: 120px;
+  flex: none;
+}
+
+.dv-time-in {
+  max-width: 760px;
+  margin: 14px 0 10px;
+}
+
+.dv-hash code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.dv-hash.hit {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.dv-qr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.dv-qr img {
+  width: 220px;
+  height: 220px;
+  image-rendering: pixelated;
+  background: white;
+}
+
+.dv-drop {
+  padding: 22px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.dv-drop p {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+}
+
+.dv-found {
+  margin-top: 10px;
+}
+
+.dv-qr-v {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.dv-qr-b {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.dv-pw {
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+
+@media (max-width: 760px) {
+  .dv-two {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* 端口很多：列表在自己的框里滚动，可以收起 */
+.m-ports {
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.m-ports-g.folded .m-ports,
+.m-ports-g.folded .m-port-q,
+.m-ports-g.folded .m-port-mode {
+  display: none;
+}

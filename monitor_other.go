@@ -21,3 +21,5 @@ func (s *sampler) sample(int) MonitorSample {
 func hideWindow(*exec.Cmd) {}
 
 func endProcess(int) error { return errors.New("只支持 Windows") }
+
+func listPorts(bool) ([]PortEntry, error) { return nil, errors.New("只支持 Windows") }
