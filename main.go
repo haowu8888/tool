@@ -45,6 +45,7 @@ func main() {
 	services := &Services{}
 	flow := &Flow{}
 	dev := &Dev{shot: shot}
+	board := &Board{}
 	mygo.Bind(virtual)
 	mygo.Bind(launcher)
 	mygo.Bind(notes)
@@ -60,6 +61,7 @@ func main() {
 	mygo.Bind(services)
 	mygo.Bind(flow)
 	mygo.Bind(dev)
+	mygo.Bind(board)
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()

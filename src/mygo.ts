@@ -87,6 +87,75 @@ export interface BatterySample {
   cycles: number;
 }
 
+/**
+ * BoardData is everything of the board. The issues' order in Issues is
+ * their order in each column.
+ */
+export interface BoardData {
+  /** the number of the next issue */
+  next: number;
+  projects: BoardProject[];
+  labels: BoardLabel[];
+  issues: BoardIssue[];
+}
+
+/**
+ * BoardEvent is a line of an issue's activity: a comment, or a change of
+ * one of its fields from From to To.
+ */
+export interface BoardEvent {
+  id: string;
+  /** Unix milliseconds */
+  at: number;
+  /** created, comment, status, priority, project, due, title */
+  kind: string;
+  from?: string;
+  to?: string;
+  /** a comment's */
+  text?: string;
+}
+
+/** BoardIssue is a card of the board. */
+export interface BoardIssue {
+  id: string;
+  /** shown as #12 */
+  num: number;
+  title: string;
+  desc?: string;
+  status: string;
+  priority?: string;
+  project?: string;
+  labels?: string[];
+  /** 2026-11-12, local */
+  due?: string;
+  subs?: BoardSub[];
+  created: number;
+  updated: number;
+  /** when it became done */
+  done?: number;
+  activity?: BoardEvent[];
+}
+
+export interface BoardLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** BoardProject groups issues; so does a label, many to one issue. */
+export interface BoardProject {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** BoardSub is one step of an issue's checklist. */
+export interface BoardSub {
+  id: string;
+  title: string;
+  done?: boolean;
+}
+
 /** CPUSample is the processor's load. */
 export interface CPUSample {
   /** percent, as Task Manager shows it */
@@ -1715,6 +1784,76 @@ export const Dev = {
   },
 } as const;
 
+/**
+ * Board is the kanban tool: issues in status columns, with projects and
+ * labels, stored in board.json in the app's config folder.
+ */
+export const Board = {
+  /** Comment adds a comment to an issue. */
+  comment(id: string, text: string): Promise<void> {
+    return call("Board.Comment", id, text);
+  },
+  /** Create adds an issue at the top of its column. */
+  create(in_: BoardIssue): Promise<BoardIssue> {
+    return call("Board.Create", in_);
+  },
+  /** Delete removes an issue. */
+  delete(id: string): Promise<void> {
+    return call("Board.Delete", id);
+  },
+  /** DeleteComment removes a comment of an issue. */
+  deleteComment(id: string, comment: string): Promise<void> {
+    return call("Board.DeleteComment", id, comment);
+  },
+  /** DeleteLabel removes a label from the board and its issues. */
+  deleteLabel(id: string): Promise<void> {
+    return call("Board.DeleteLabel", id);
+  },
+  /** DeleteProject removes a project; its issues stay, without a project. */
+  deleteProject(id: string): Promise<void> {
+    return call("Board.DeleteProject", id);
+  },
+  /** List returns the board. */
+  list(): Promise<BoardData> {
+    return call("Board.List");
+  },
+  /**
+   * Move puts an issue in a column, in front of the issue with ID before,
+   * or at the column's end when before is empty.
+   */
+  move(id: string, status: string, before: string): Promise<void> {
+    return call("Board.Move", id, status, before);
+  },
+  /**
+   * Restore puts a deleted issue back as it was, in front of the issue
+   * with ID before, or last without it: the undoing of Delete.
+   */
+  restore(is: BoardIssue, before: string): Promise<void> {
+    return call("Board.Restore", is, before);
+  },
+  /**
+   * SaveLabel adds a label, when it has no ID, or changes the one with its
+   * ID.
+   */
+  saveLabel(l: BoardLabel): Promise<BoardLabel> {
+    return call("Board.SaveLabel", l);
+  },
+  /**
+   * SaveProject adds a project, when it has no ID, or renames and recolors
+   * the one with its ID.
+   */
+  saveProject(p: BoardProject): Promise<BoardProject> {
+    return call("Board.SaveProject", p);
+  },
+  /**
+   * Update replaces an issue's fields with in's, noting the changes in its
+   * activity; its comments and number stay.
+   */
+  update(in_: BoardIssue): Promise<void> {
+    return call("Board.Update", in_);
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
@@ -1724,6 +1863,8 @@ export const events = {
    * more when it ends.
    */
   aiChunk: event<AIChunkEvent>("aiChunk"),
+  /** BoardChanged is sent with all the board's data whenever it changes. */
+  boardChanged: event<BoardData>("boardChanged"),
   /** ClipsChanged is sent with the clipboard history whenever it changes. */
   clipsChanged: event<ClipItem[]>("clipsChanged"),
   /** ClipsSummoned tells the history's popup that the shortcut brought it up. */

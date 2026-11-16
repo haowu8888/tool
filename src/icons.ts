@@ -6,6 +6,7 @@ const svg = (body: string) =>
 export const icons = {
   launcher: svg(`<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>`),
   notes: svg(`<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2.5h6v3H9zM8.5 12l2 2 4-4M8.5 17.5h7"/>`),
+  board: svg(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16M5.5 8h1.5M11.5 8h1.5M17.5 8h1.5M11.5 12h1.5"/>`),
   monitor: svg(`<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>`),
   flow: svg(`<circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="5.5" r="2.5"/><circle cx="19" cy="18.5" r="2.5"/><path d="M7.5 12h3c3 0 3-6.5 6-6.5M10.5 12c3 0 3 6.5 6 6.5"/>`),
   dev: svg(`<path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>`),

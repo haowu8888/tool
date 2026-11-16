@@ -585,7 +585,7 @@ function initials(name: string) {
 // initialsIndex returns where q, as letters and digits, matches the
 // initials of a name's characters in a row, or -1. A name without Chinese
 // has the initials of its words: vsc for Visual Studio Code.
-function initialsIndex(name: string, q: string) {
+export function initialsIndex(name: string, q: string) {
   if (!q || !/^[a-z0-9]+$/.test(q)) return -1;
   if (!/[\u3400-\u9fff]/.test(name)) {
     const words = name.toLowerCase().match(/[a-z]+|[0-9]+/g) ?? [];

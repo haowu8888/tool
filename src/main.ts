@@ -7,6 +7,7 @@ import { monitorTool } from "./monitor";
 import { servicesTool } from "./services";
 import { flowTool } from "./flow";
 import { devTool } from "./devtools";
+import { boardTool } from "./board";
 import { recordTool, showRecordPanel } from "./record";
 import { focusAdd, notesTool } from "./notes";
 import { showOverlay } from "./overlay";
@@ -29,6 +30,7 @@ interface Tool {
 const tools: Tool[] = [
   launcherTool,
   notesTool,
+  boardTool,
   shotTool,
   recordTool,
   clipsTool,
