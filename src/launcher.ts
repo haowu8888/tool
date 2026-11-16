@@ -202,23 +202,26 @@ function grid(apps: LauncherApp[], category: string, searching = false) {
 function iconHTML(path: string, name: string) {
   const url = icons.get(path);
   return url
-    ? `<img class="l-icon" src="${url}" alt="" />`
+    ? `<img class="l-icon" src="${url}" alt="" data-icon="${esc(path)}" />`
     : `<span class="l-icon l-fallback" data-icon="${esc(path)}">${esc([...name][0] ?? "?")}</span>`;
 }
 
-// loadIcons fetches the icons the elements show placeholders for, a batch
-// at a time, so that the page stays responsive.
+// loadIcons fetches the icons of the elements, a batch at a time, so that
+// the page stays responsive. Icons shown already are asked for again: Go
+// draws a file's icon anew once the file changed, as a new build of a
+// program, and answers from its cache otherwise.
 function loadIcons(root: HTMLElement) {
-  const pending = [...new Set([...root.querySelectorAll<HTMLElement>("[data-icon]")].map((e) => e.dataset.icon!))].filter((p) => !icons.has(p));
+  const pending = [...new Set([...root.querySelectorAll<HTMLElement>("[data-icon]")].map((e) => e.dataset.icon!))];
   const batch = async () => {
     const paths = pending.splice(0, 16);
     if (!paths.length || !root.isConnected) return;
     const got = await Launcher.icons(paths);
     for (const [p, url] of Object.entries(got)) {
+      const had = icons.get(p);
       icons.set(p, url);
-      if (!url) continue;
+      if (!url || url === had) continue;
       root.querySelectorAll<HTMLElement>("[data-icon]").forEach((e) => {
-        if (e.dataset.icon === p) e.outerHTML = `<img class="l-icon" src="${url}" alt="" />`;
+        if (e.dataset.icon === p) e.outerHTML = `<img class="l-icon" src="${url}" alt="" data-icon="${esc(p)}" />`;
       });
     }
     await batch();

@@ -46,6 +46,7 @@ func main() {
 	flow := &Flow{}
 	dev := &Dev{shot: shot}
 	board := &Board{}
+	updates := &Updates{settings: settings}
 	mygo.Bind(virtual)
 	mygo.Bind(launcher)
 	mygo.Bind(notes)
@@ -62,6 +63,7 @@ func main() {
 	mygo.Bind(flow)
 	mygo.Bind(dev)
 	mygo.Bind(board)
+	mygo.Bind(updates)
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()
@@ -240,6 +242,7 @@ func main() {
 		flow.onAlerts = reminder.flow
 		flow.open = func() { showTool("flow") }
 		go flow.watch()
+		go updates.watch()
 		// A QR code cut out of the screen shows in the dev tools.
 		dev.open = func() { showTool("dev") }
 		shot.onQR = dev.found

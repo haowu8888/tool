@@ -135,6 +135,21 @@ body {
   background: color-mix(in srgb, var(--muted) 12%, transparent);
 }
 
+.nav-item.has-update .icon {
+  position: relative;
+}
+
+.nav-item.has-update .icon::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e5484d;
+}
+
 .nav-item.active {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
@@ -1731,6 +1746,17 @@ html.widget #app {
 
 .s-key-edit .s-key {
   min-width: 240px;
+}
+
+.s-row > .s-key-edit button.s-up-install {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.s-row > .s-key-edit button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .s-key-edit .s-key:hover,

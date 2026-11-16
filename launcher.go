@@ -59,7 +59,7 @@ type InstalledApp struct {
 type Launcher struct {
 	mu    sync.Mutex
 	data  *LauncherData // loaded on first use
-	icons sync.Map      // path → data URL, "" when it has none
+	icons sync.Map      // path → fileIcon
 
 	// summoned is whether the shortcut brought the window up, so that
 	// launching an app or Escape hides it again.
@@ -298,14 +298,31 @@ func (l *Launcher) Reveal(id string) error {
 	return nil
 }
 
+// fileIcon is the icon of a file as it was when it was drawn: a file
+// replaced since, as a new build of a program, gets its icon again.
+type fileIcon struct {
+	mod  time.Time
+	size int64
+	url  string // a PNG data URL, "" when it has none
+}
+
 // Icons returns the icons of paths as PNG data URLs, "" for those that
 // have none.
 func (l *Launcher) Icons(paths []string) map[string]string {
 	icons := make(map[string]string, len(paths))
 	for _, p := range paths {
+		var mod time.Time
+		var size int64
+		if !strings.Contains(p, "://") {
+			if fi, err := os.Stat(expandEnv(p)); err == nil {
+				mod, size = fi.ModTime(), fi.Size()
+			}
+		}
 		if v, ok := l.icons.Load(p); ok {
-			icons[p] = v.(string)
-			continue
+			if c := v.(fileIcon); c.mod.Equal(mod) && c.size == size {
+				icons[p] = c.url
+				continue
+			}
 		}
 		url := ""
 		if !strings.Contains(p, "://") {
@@ -313,7 +330,7 @@ func (l *Launcher) Icons(paths []string) map[string]string {
 				url = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
 			}
 		}
-		l.icons.Store(p, url)
+		l.icons.Store(p, fileIcon{mod, size, url})
 		icons[p] = url
 	}
 	return icons

@@ -1,5 +1,5 @@
 // VirtualScreen and events are generated from the Go code by `mygo generate`.
-import { VirtualScreen, events, type DisplayInfo } from "./mygo";
+import { Updates, VirtualScreen, events, type DisplayInfo, type UpdateState } from "./mygo";
 import { icons } from "./icons";
 import { clipsTool, showClips } from "./clips";
 import { focusSearch, launcherTool } from "./launcher";
@@ -199,6 +199,10 @@ function showToolbox() {
   onSettings(renderNav);
   // The shortcut, the tray or the floating ball failed to turn it on.
   events.virtualScreenFailed.on(showStartFailed);
+  // A red dot on 设置 while a newer build waits on the cloud drive.
+  const markUpdate = (u: UpdateState) => nav.querySelector(`.nav-item[data-id="${settingsTool.id}"]`)!.classList.toggle("has-update", u.newer);
+  events.updateChanged.on(markUpdate);
+  void Updates.state().then(markUpdate);
   const home = settings.homeTool;
   select(home === settingsTool.id || visibleTools().some((t) => t.id === home) ? home : (visibleTools()[0] ?? settingsTool).id);
 }

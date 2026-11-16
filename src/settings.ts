@@ -1,6 +1,6 @@
 // The settings: kept by Go in settings.json, shown in the 设置 panel.
-import { chime, esc } from "./ui";
-import { AI, Overlay, Settings, events, type AISettings, type AppSettings, type ShortcutSetting, type ShortcutStatus } from "./mygo";
+import { chime, esc, onLeave } from "./ui";
+import { AI, Overlay, Settings, Updates, events, type AISettings, type AppSettings, type ShortcutSetting, type ShortcutStatus, type UpdateState } from "./mygo";
 
 // ToolInfo is what the settings know of a tool of the sidebar.
 export interface ToolInfo {
@@ -299,7 +299,8 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
     <section class="s-group">
       <h2>关于</h2>
       <div class="s-card">
-        <div class="s-row"><span>版本</span><span class="muted" id="s-version"></span></div>
+        <div class="s-row"><span>版本<small class="muted" id="s-up-info"></small></span><span class="s-key-edit"><button type="button" id="s-up-check">检查更新</button><button type="button" id="s-up-install" class="s-up-install" hidden></button></span></div>
+        <label class="s-row"><span>自动检查更新<small class="muted">启动一分钟后和之后每六小时看一次网盘（Flow 每次发布都会传上去），有新版本时侧栏「设置」上有红点</small></span><input type="checkbox" id="s-up-auto" /></label>
         <div class="s-row"><span>数据文件夹<small class="muted" id="s-dir"></small></span><button id="s-open">打开</button></div>
       </div>
     </section>`;
@@ -519,8 +520,36 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
     void saveShortcut(id, (k) => (k.disabled = !box.checked));
   });
   void renderKeys();
-  void Settings.about().then((a) => {
-    $("#s-version").textContent = a.version;
-    $("#s-dir").textContent = a.dataDir;
+  void Settings.about().then((a) => ($("#s-dir").textContent = a.dataDir));
+
+  // Updates: the builds Flow uploads to the cloud drive.
+  const upAuto = $<HTMLInputElement>("#s-up-auto");
+  upAuto.checked = settings.update.auto;
+  onLeave(onSettings((s) => (upAuto.checked = s.update.auto)));
+  upAuto.addEventListener("change", () => void save((s) => (s.update.auto = upAuto.checked)));
+  const upInfo = $("#s-up-info");
+  const upCheck = $<HTMLButtonElement>("#s-up-check");
+  const upInstall = $<HTMLButtonElement>("#s-up-install");
+  const showUpdate = (u: UpdateState) => {
+    const kind = u.portable ? "免安装版" : "安装版";
+    let info = `${u.current || "开发版"} · ${kind}`;
+    if (u.installing) info += ` · 正在下载 ${u.size ? Math.floor((u.done / u.size) * 100) : 0}%，完成后自动重启`;
+    else if (u.checking) info += " · 正在检查…";
+    else if (u.error) info += ` · ${u.error}`;
+    else if (u.newer) info += ` · 有新版本 ${u.latest}（${new Date(u.published!).toLocaleString()} 发布，${(u.size! / 1048576).toFixed(1)} MB）`;
+    else if (u.checked) info += ` · 已是最新${u.latest ? `（网盘上是 ${u.latest}）` : ""}`;
+    upInfo.textContent = info;
+    upInfo.classList.toggle("s-bad", !!u.error);
+    upCheck.disabled = u.checking || u.installing;
+    upInstall.hidden = !u.newer;
+    upInstall.disabled = u.installing;
+    upInstall.textContent = u.installing ? "正在更新…" : `更新到 ${u.latest}`;
+  };
+  onLeave(events.updateChanged.on(showUpdate));
+  void Updates.state().then(showUpdate);
+  upCheck.addEventListener("click", () => void Updates.check().catch(() => {}));
+  upInstall.addEventListener("click", () => {
+    if (!confirm("下载新版本后工具箱会退出，装好后自动重新打开。现在更新？")) return;
+    void Updates.install().catch((e) => alert(e instanceof Error ? e.message : String(e)));
   });
 }

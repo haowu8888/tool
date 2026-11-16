@@ -73,6 +73,8 @@ export interface AppSettings {
   clipboard: ClipSettings;
   /** Record is the screen recorder's. */
   record: RecordSettings;
+  /** Update checks the cloud drive for a newer build. */
+  update: UpdateSettings;
 }
 
 /** BatterySample is the battery's charge and health. */
@@ -913,6 +915,34 @@ export interface Translation {
   to: string;
   text: string;
   lines: string[];
+}
+
+/** UpdateSettings are the settings of updates. */
+export interface UpdateSettings {
+  /** check a minute after the start and every six hours */
+  auto: boolean;
+}
+
+/** UpdateState is what the settings page shows of updates. */
+export interface UpdateState {
+  current: string;
+  latest?: string;
+  newer: boolean;
+  /**
+   * Portable is a copy run from the zip, which an update replaces in its
+   * folder; an installed copy runs the new installer.
+   */
+  portable: boolean;
+  file?: string;
+  size?: number;
+  /** Unix milliseconds */
+  published?: number;
+  checked?: number;
+  checking: boolean;
+  /** While installing: the bytes downloaded of Size. */
+  installing: boolean;
+  done: number;
+  error?: string;
 }
 
 /** WidgetSettings are the floating ball's. */
@@ -1854,6 +1884,25 @@ export const Board = {
   },
 } as const;
 
+/** Updates checks the share for a newer build and installs it. */
+export const Updates = {
+  /** Check looks for a newer build in the share. */
+  check(): Promise<UpdateState> {
+    return call("Updates.Check");
+  },
+  /**
+   * Install downloads the newer build, quits, and lets a script put it in
+   * place and start it again.
+   */
+  install(): Promise<void> {
+    return call("Updates.Install");
+  },
+  /** State returns what is known without checking. */
+  state(): Promise<UpdateState> {
+    return call("Updates.State");
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
@@ -1927,6 +1976,8 @@ export const events = {
    * translate its text.
    */
   pinAction: event<PinActionEvent>("pinAction"),
+  /** UpdateChanged is sent whenever a check or a download moves on. */
+  updateChanged: event<UpdateState>("updateChanged"),
   /** VirtualScreenChanged is sent whenever the virtual screen turns on or off. */
   virtualScreenChanged: event<boolean>("virtualScreenChanged"),
   /**

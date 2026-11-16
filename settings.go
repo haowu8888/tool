@@ -44,6 +44,8 @@ type AppSettings struct {
 	Clipboard ClipSettings `json:"clipboard"`
 	// Record is the screen recorder's.
 	Record RecordSettings `json:"record"`
+	// Update checks the cloud drive for a newer build.
+	Update UpdateSettings `json:"update"`
 }
 
 // MonitorSettings are the system monitor's.
@@ -124,6 +126,11 @@ type ShortcutStatus struct {
 	Error    string `json:"error,omitempty"` // why it could not be registered
 }
 
+// UpdateSettings are the settings of updates.
+type UpdateSettings struct {
+	Auto bool `json:"auto"` // check a minute after the start and every six hours
+}
+
 // AboutInfo describes the app for the settings page.
 type AboutInfo struct {
 	Version string `json:"version"`
@@ -145,6 +152,7 @@ var defaultSettings = AppSettings{
 	},
 	Shot:   ShotSettings{To: "auto", Engine: "auto"},
 	Record: RecordSettings{FPS: 30, Cursor: true, Sound: true},
+	Update: UpdateSettings{Auto: true},
 	Tools:  []ToolSetting{},
 }
 

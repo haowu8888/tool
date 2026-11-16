@@ -62,7 +62,10 @@ stages:
           - name: 构建
             run: |
               cd src
-              VERSION="$(sed -nE 's/^\s*version: "([^"]+)".*/\1/p' mygo.config.ts)"
+              # 版本 = mygo.config.ts 的主次版本 + 运行号（0.1.0 → 0.1.<运行号>），每次发布都比上一次新，工具箱的「检查更新」按网盘里的文件名比较
+              BASE="$(sed -nE 's/^\s*version: "([^"]+)".*/\1/p' mygo.config.ts)"
+              VERSION="${BASE%.*}.$FLOW_RUN_NUMBER"
+              sed -i -E "s/^(\s*version: \")[^\"]+/\1$VERSION/" mygo.config.ts
               echo "版本 $VERSION（运行 #$FLOW_RUN_NUMBER，提交 $(git rev-parse --short HEAD)）"
               # 先在 Linux 上对 Windows 做一次 vet，编译错误早点暴露
               GOOS=windows GOARCH=amd64 go vet ./...
