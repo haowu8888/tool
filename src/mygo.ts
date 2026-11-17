@@ -75,6 +75,8 @@ export interface AppSettings {
   record: RecordSettings;
   /** Update checks the cloud drive for a newer build. */
   update: UpdateSettings;
+  /** Launcher is the quick launcher's. */
+  launcher: LauncherSettings;
 }
 
 /** BatterySample is the battery's charge and health. */
@@ -404,6 +406,12 @@ export interface LauncherCategory {
 export interface LauncherData {
   categories: LauncherCategory[];
   apps: LauncherApp[];
+}
+
+/** LauncherSettings are the quick launcher's. */
+export interface LauncherSettings {
+  /** HideAfterLaunch hides the window after an app is launched from it. */
+  hideAfterLaunch: boolean;
 }
 
 /** MemorySample is the physical memory in use. */
@@ -1071,7 +1079,7 @@ export const Launcher = {
   },
   /**
    * Launch starts an app, as administrator when admin is true or the app
-   * says so. After the shortcut brought the window up, it hides it again.
+   * says so. Then it hides the window, unless the settings say not to.
    */
   launch(id: string, admin: boolean): Promise<void> {
     return call("Launcher.Launch", id, admin);

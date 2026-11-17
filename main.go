@@ -32,6 +32,7 @@ func main() {
 	launcher := &Launcher{}
 	hotkeys := &Hotkeys{}
 	settings := &Settings{hotkeys: hotkeys}
+	launcher.settings = settings
 	widget := &Widget{settings: settings}
 	notes := &Notes{}
 	reminder := &Reminder{widget: widget, settings: settings}

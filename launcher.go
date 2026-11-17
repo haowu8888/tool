@@ -66,6 +66,7 @@ type Launcher struct {
 	summoned bool
 	// hideWindow, when set, hides the toolbox window.
 	hideWindow func()
+	settings   *Settings
 }
 
 var defaultCategories = []string{"常用", "系统工具", "开发", "办公"}
@@ -250,7 +251,7 @@ func (l *Launcher) MoveCategory(id string, index int) error {
 }
 
 // Launch starts an app, as administrator when admin is true or the app
-// says so. After the shortcut brought the window up, it hides it again.
+// says so. Then it hides the window, unless the settings say not to.
 func (l *Launcher) Launch(id string, admin bool) error {
 	l.mu.Lock()
 	if err := l.load(); err != nil {
@@ -275,7 +276,10 @@ func (l *Launcher) Launch(id string, admin bool) error {
 		}
 		return nil
 	})
-	l.Dismiss()
+	l.unsummon()
+	if l.hideWindow != nil && (l.settings == nil || l.settings.current().Launcher.HideAfterLaunch) {
+		l.hideWindow()
+	}
 	return nil
 }
 

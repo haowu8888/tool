@@ -46,6 +46,14 @@ type AppSettings struct {
 	Record RecordSettings `json:"record"`
 	// Update checks the cloud drive for a newer build.
 	Update UpdateSettings `json:"update"`
+	// Launcher is the quick launcher's.
+	Launcher LauncherSettings `json:"launcher"`
+}
+
+// LauncherSettings are the quick launcher's.
+type LauncherSettings struct {
+	// HideAfterLaunch hides the window after an app is launched from it.
+	HideAfterLaunch bool `json:"hideAfterLaunch"`
 }
 
 // MonitorSettings are the system monitor's.
@@ -150,10 +158,11 @@ var defaultSettings = AppSettings{
 		SensorsURL: "http://127.0.0.1:8085",
 		Overlay:    OverlaySettings{Items: []string{"cpu", "cpuTemp", "mem", "gpu", "diskTemp", "net"}, Opacity: 0.9},
 	},
-	Shot:   ShotSettings{To: "auto", Engine: "auto"},
-	Record: RecordSettings{FPS: 30, Cursor: true, Sound: true},
-	Update: UpdateSettings{Auto: true},
-	Tools:  []ToolSetting{},
+	Shot:     ShotSettings{To: "auto", Engine: "auto"},
+	Record:   RecordSettings{FPS: 30, Cursor: true, Sound: true},
+	Update:   UpdateSettings{Auto: true},
+	Launcher: LauncherSettings{HideAfterLaunch: true},
+	Tools:    []ToolSetting{},
 }
 
 // Settings keeps the settings and applies them.

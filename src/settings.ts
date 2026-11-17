@@ -238,6 +238,12 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
       </div>
     </section>
     <section class="s-group">
+      <h2>快捷启动</h2>
+      <div class="s-card">
+        <label class="s-row"><span>启动软件后隐藏窗口<small class="muted">关掉后启动软件时工具箱窗口留在原处</small></span><input type="checkbox" id="s-l-hide" /></label>
+      </div>
+    </section>
+    <section class="s-group">
       <h2>悬浮球</h2>
       <div class="s-card">
         <label class="s-row"><span>在桌面显示悬浮球<small class="muted">像桌宠一样一直浮在最上层</small></span><input type="checkbox" id="s-widget" /></label>
@@ -319,6 +325,8 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
   login.addEventListener("change", () => void save((s) => (s.openAtLogin = login.checked)));
   const hidden = $<HTMLInputElement>("#s-hidden");
   hidden.addEventListener("change", () => void save((s) => (s.startHidden = hidden.checked)));
+  const launchHide = $<HTMLInputElement>("#s-l-hide");
+  launchHide.addEventListener("change", () => void save((s) => (s.launcher.hideAfterLaunch = launchHide.checked)));
   const widget = $<HTMLInputElement>("#s-widget");
   widget.addEventListener("change", () => void save((s) => (s.widget.show = widget.checked)));
   const snap = $<HTMLInputElement>("#s-snap");
@@ -403,6 +411,7 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
     login.checked = s.openAtLogin;
     hidden.checked = s.startHidden;
     hidden.disabled = !s.openAtLogin;
+    launchHide.checked = s.launcher.hideAfterLaunch;
     widget.checked = s.widget.show;
     snap.checked = s.widget.snap;
     tuck.checked = s.widget.tuck;
