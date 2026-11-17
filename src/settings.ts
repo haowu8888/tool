@@ -1,6 +1,8 @@
 // The settings: kept by Go in settings.json, shown in the 设置 panel.
-import { chime, esc, onLeave } from "./ui";
+import { chime, esc, onLeave, openDialog } from "./ui";
 import { accents, applyAppearance, backgroundURL, defaultAccent, isDark, styles } from "./appearance";
+import { petSVG, pets } from "./pets";
+import ballIcon from "./assets/widget.png";
 import { AI, Overlay, Settings, Updates, events, type AISettings, type AppSettings, type ShortcutSetting, type ShortcutStatus, type UpdateState } from "./mygo";
 
 // ToolInfo is what the settings know of a tool of the sidebar.
@@ -263,7 +265,8 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
       <h2>悬浮球</h2>
       <div class="s-card">
         <label class="s-row"><span>在桌面显示悬浮球<small class="muted">像桌宠一样一直浮在最上层</small></span><input type="checkbox" id="s-widget" /></label>
-        <div class="s-row s-sub"><span>大小</span><span class="s-range"><input type="range" id="s-size" min="40" max="80" step="4" /><output></output></span></div>
+        <div class="s-row s-sub s-look-row"><span>形象<small class="muted">小角色会眨眼、偶尔自己动，鼠标移上去开心、有提醒时着急、电脑 5 分钟没人用就睡觉；自定义用透明 PNG 或 GIF 动图</small></span><div class="s-styles s-pets"></div></div>
+        <div class="s-row s-sub"><span>大小</span><span class="s-range"><input type="range" id="s-size" min="40" max="160" step="4" /><output></output></span></div>
         <div class="s-row s-sub"><span>不透明度</span><span class="s-range"><input type="range" id="s-opacity" min="30" max="100" step="5" /><output></output></span></div>
         <label class="s-row s-sub"><span>贴边吸附<small class="muted">拖到离屏幕左右边缘 32 像素以内松手，自动贴到边上</small></span><input type="checkbox" id="s-snap" /></label>
         <label class="s-row s-sub s-sub2"><span>贴边后缩进去一半<small class="muted">鼠标移上去滑出来，移开后再缩回去</small></span><input type="checkbox" id="s-tuck" /></label>
@@ -429,6 +432,30 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
   size.addEventListener("change", () => void save((s) => (s.widget.size = +size.value)));
   opacity.addEventListener("change", () => void save((s) => (s.widget.opacity = +opacity.value / 100)));
   $("#s-reset").addEventListener("click", () => void Settings.resetWidget());
+  const petsBox = $(".s-pets");
+  petsBox.addEventListener("click", (e) => {
+    const el = e.target as HTMLElement;
+    const del = el.closest<HTMLElement>("[data-del]");
+    if (del) {
+      e.stopPropagation();
+      const name = del.dataset.del!;
+      const dlg = openDialog(`
+        <h2>删除这个形象？</h2>
+        <p class="s-pet-del-pic"><img src="${backgroundURL(name)}" alt="" /></p>
+        <p class="muted">图片会从工具箱的数据文件夹里删掉，原来的文件不受影响。</p>
+        <div class="l-buttons"><button type="button" data-close>取消</button><button type="button" class="primary danger-bg" data-ok>删除</button></div>`);
+      dlg.querySelector("[data-ok]")!.addEventListener("click", () => {
+        dlg.close();
+        void Settings.removePetImage(name).catch((e) => alert(e));
+      });
+      return;
+    }
+    const b = el.closest<HTMLButtonElement>("button");
+    if (!b) return;
+    if (b.dataset.add) void Settings.pickPetImage().catch((e) => alert(e));
+    else if (b.dataset.image) void save((s) => ((s.widget.pet = "custom"), (s.widget.image = b.dataset.image!)));
+    else void save((s) => (s.widget.pet = b.dataset.pet!));
+  });
   $("#s-open").addEventListener("click", () => void Settings.openDataFolder().catch((e) => alert(e)));
 
   const list = $<HTMLUListElement>(".s-tools");
@@ -503,6 +530,22 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
     for (const el of panel.querySelectorAll<HTMLElement>(".s-mon .s-sub")) el.classList.toggle("off", !s.monitor.overlay.show);
     autoHide.value = String(s.reminder.autoHide);
     sound.checked = s.reminder.sound;
+    const w = s.widget;
+    petsBox.innerHTML =
+      pets
+        .filter((p) => p.id !== "custom")
+        .map((p) => {
+          const pic = p.id === "ball" ? `<img class="s-pet-ball" src="${ballIcon}" alt="" />` : petSVG(p.id, "idle");
+          return `<button type="button" data-pet="${p.id}" class="${p.id === w.pet ? "on" : ""}" title="${p.name}"><span class="s-pet-pic">${pic}</span>${p.name}</button>`;
+        })
+        .join("") +
+      w.images
+        .map(
+          (name, i) =>
+            `<button type="button" data-image="${esc(name)}" class="${w.pet === "custom" && w.image === name ? "on" : ""}"><span class="s-pet-pic"><img src="${backgroundURL(name)}" alt="" /></span>自定义 ${i + 1}<span class="s-pet-del" data-del="${esc(name)}" title="删除">✕</span></button>`,
+        )
+        .join("") +
+      `<button type="button" data-add="1" title="选一张透明 PNG 或 GIF 动图"><span class="s-pet-pic s-pet-add">＋</span>添加</button>`;
     size.value = String(s.widget.size);
     opacity.value = String(Math.round(s.widget.opacity * 100));
     showRange();

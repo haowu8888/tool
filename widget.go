@@ -19,6 +19,14 @@ const snapDistance = 32
 // tuckDelay is how long the pointer is away before the ball tucks in.
 const tuckDelay = 250 * time.Millisecond
 
+// maxWidgetSize is the largest the ball gets, in DIPs: a pet shows more
+// than a ball.
+const maxWidgetSize = 160
+
+// widgetPets are the ball's looks: the ball, the pets src/pets.ts draws,
+// and custom for a picture of the user's.
+var widgetPets = []string{"ball", "cat", "ghost", "slime", "bot", "custom"}
+
 // Widget is the floating ball: a small window that stays on top of the
 // others like a desktop pet. A click opens the toolbox, a right click its
 // menu, and dragging moves it. Stuck to a screen edge, it can tuck half of
@@ -60,6 +68,12 @@ func (w *Widget) Menu() {
 	w.menuOpen = false
 	w.mu.Unlock()
 	w.Peek(false)
+}
+
+// Idle tells how many seconds ago the keyboard or mouse were last used: a
+// pet falls asleep when nobody is at the computer.
+func (w *Widget) Idle() int {
+	return int(mygo.Power.IdleTime().Seconds())
 }
 
 // Peek slides a tucked ball out as the pointer comes over it, and tucks it

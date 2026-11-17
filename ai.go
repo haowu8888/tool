@@ -95,6 +95,12 @@ func (a *AI) Write(req AIRequest) (string, error) {
 		{"role": "system", "content": aiSystemPrompt},
 		{"role": "user", "content": task + "\n\n" + about + "Text:\n\"\"\"\n" + req.Text + "\n\"\"\""},
 	}
+	return a.start(cfg, messages), nil
+}
+
+// start sends messages to the AI and returns the request's ID; AIChunk
+// brings the answer.
+func (a *AI) start(cfg AISettings, messages []map[string]string) string {
 	id := newID()
 	// Slow models take a minute to start; the user can cancel.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -120,7 +126,64 @@ func (a *AI) Write(req AIRequest) (string, error) {
 		}
 		AIChunk.Broadcast(end)
 	}()
-	return id, nil
+	return id
+}
+
+// AIChatMessage is a turn of the chat with the floating ball's pet: role is
+// user or assistant.
+type AIChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// AIChatRequest is the chat so far, ending with the user's turn, and the
+// pet that answers.
+type AIChatRequest struct {
+	Messages []AIChatMessage `json:"messages"`
+	Pet      string          `json:"pet"`
+}
+
+// The pets' names and manners, for the AI to answer as them.
+var petPersonas = map[string][2]string{
+	"cat":   {"橘猫", "你是一只橘猫，偶尔在句尾加个「喵」，但别每句都加。"},
+	"ghost": {"小幽灵", "你是一只软软的小幽灵，说话轻飘飘、有点害羞。"},
+	"slime": {"史莱姆", "你是一团乐观的史莱姆，说话软乎乎、很有元气。"},
+	"bot":   {"机器人", "你是一个小机器人，说话带一点机器人腔，偶尔「滴」一声。"},
+}
+
+// chatTurns is how many of the last turns go to the AI.
+const chatTurns = 30
+
+// Chat sends the chat with the floating ball's pet and returns the
+// request's ID; AIChunk brings the answer.
+func (a *AI) Chat(req AIChatRequest) (string, error) {
+	cfg := a.settings.current().AI
+	if strings.TrimSpace(cfg.BaseURL) == "" || strings.TrimSpace(cfg.Model) == "" {
+		return "", errors.New("还没有配置 AI：在「设置 → AI 写作」里填接口地址、密钥和模型")
+	}
+	if len(req.Messages) == 0 || req.Messages[len(req.Messages)-1].Role != "user" {
+		return "", errors.New("没有要发送的话")
+	}
+	persona, ok := petPersonas[req.Pet]
+	if !ok {
+		persona = [2]string{"小助手", ""}
+	}
+	system := "你是住在用户 Windows 桌面上的桌宠「" + persona[0] + "」，也是「工具箱」这个桌面应用的小助手。" + persona[1] +
+		"用简体中文回答（用户用别的语言时跟着用），语气亲切自然；回答简洁，除非用户要求详细。需要时用 Markdown，代码放进代码块。" +
+		"现在是 " + time.Now().Format("2006-01-02 15:04 Monday") + "。"
+	messages := []map[string]string{{"role": "system", "content": system}}
+	turns := req.Messages[max(len(req.Messages)-chatTurns, 0):]
+	for _, m := range turns {
+		if m.Role != "user" && m.Role != "assistant" {
+			continue
+		}
+		content := m.Content
+		if r := []rune(content); len(r) > 8000 {
+			content = string(r[:8000])
+		}
+		messages = append(messages, map[string]string{"role": m.Role, "content": content})
+	}
+	return a.start(cfg, messages), nil
 }
 
 // Cancel stops a request.

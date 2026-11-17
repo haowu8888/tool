@@ -43,6 +43,7 @@ func main() {
 	record := &Record{shot: shot, settings: settings}
 	shot.rec = record
 	clips := &Clips{settings: settings}
+	petChat := &PetChat{widget: widget}
 	services := &Services{}
 	flow := &Flow{}
 	dev := &Dev{shot: shot}
@@ -60,6 +61,7 @@ func main() {
 	mygo.Bind(shot)
 	mygo.Bind(record)
 	mygo.Bind(clips)
+	mygo.Bind(petChat)
 	mygo.Bind(services)
 	mygo.Bind(flow)
 	mygo.Bind(dev)
@@ -76,7 +78,7 @@ func main() {
 
 	// Start in the saved appearance, without a flash of the other.
 	prefs := settings.Get()
-	cleanBackgrounds(prefs.Appearance.Background)
+	cleanAppearance(prefs)
 	applyTheme(prefs.Theme)
 
 	// The displays the virtual display replaced come back however the app
@@ -250,6 +252,7 @@ func main() {
 		dev.open = func() { showTool("dev") }
 		shot.onQR = dev.found
 		widget.onMove = func() { reminder.place() }
+		petChat.openSettings = func() { showTool("settings") }
 		overlay.open = func() { showTool("monitor") }
 		go notes.watch()
 		widget.menu = func() *mygo.Menu {
@@ -263,6 +266,7 @@ func main() {
 			}
 			return mygo.NewMenu([]*mygo.MenuItem{
 				{Label: "打开工具箱", Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
+				{Label: "和我聊天（长按我也行）", Click: func(*mygo.MenuItem, *mygo.Window) { go petChat.Open() }},
 				{Label: "快捷启动", Click: func(*mygo.MenuItem, *mygo.Window) {
 					raise()
 					launcher.summon()

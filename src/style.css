@@ -244,6 +244,14 @@ button.primary {
   cursor: pointer;
 }
 
+button.primary:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+button.primary:not(:disabled):active {
+  filter: brightness(0.95);
+}
+
 .options {
   display: flex;
   flex-direction: column;
@@ -306,11 +314,13 @@ button {
   border-radius: 8px;
   background: var(--card);
   cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
 }
 
-.l-actions button:not(.primary):hover,
+.l-actions button:not(.primary):not(:disabled):hover,
 .l-dialog button:not(.primary):not(:disabled):hover {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--fg) 22%, var(--line));
+  background: color-mix(in srgb, var(--fg) 5%, var(--card));
 }
 
 button:disabled {
@@ -319,18 +329,37 @@ button:disabled {
 }
 
 .l-search,
-.l-dialog input:not([type="checkbox"]),
+.l-dialog input:not([type="checkbox"], [type="radio"]),
 .l-dialog select,
 .l-dialog textarea {
   box-sizing: border-box;
   width: 100%;
   font: inherit;
+  font-size: 13.5px;
+  font-weight: 400;
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--card);
-  color: inherit;
+  color: var(--fg);
   outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+/* 弹窗里的输入框比弹窗底色稍深，看得出是可以填的 */
+.l-dialog input:not([type="checkbox"], [type="radio"]),
+.l-dialog select,
+.l-dialog textarea {
+  background: color-mix(in srgb, var(--fg) 3%, var(--card));
+}
+
+.l-dialog :is(input, select, textarea):not(:focus):hover {
+  border-color: color-mix(in srgb, var(--fg) 20%, var(--line));
+}
+
+.l-dialog textarea {
+  resize: vertical;
+  line-height: 1.5;
 }
 
 .l-search:focus,
@@ -338,6 +367,7 @@ button:disabled {
 .l-dialog select:focus,
 .l-dialog textarea:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .panel > .l-search {
@@ -512,23 +542,144 @@ button:disabled {
   color: #ef4444 !important;
 }
 
+/* 弹窗：比页面亮一层的卡片，背后模糊变暗；标题和底部按钮在内容滚动时留在原处 */
 .l-dialog {
+  --dlg-px: 24px;
+  --dlg-py: 20px;
   width: min(560px, calc(100vw - 48px));
-  padding: 22px 24px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg);
+  max-height: calc(100vh - 40px);
+  font-size: 14px;
+  box-sizing: border-box;
+  padding: var(--dlg-py) var(--dlg-px);
+  border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+  border-radius: 16px;
+  background: var(--card);
   color: var(--fg);
-  box-shadow: 0 16px 48px rgb(0 0 0 / 0.3);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.28), 0 2px 8px rgb(0 0 0 / 0.12);
+  overflow: auto;
+}
+
+.l-dialog[open] {
+  animation: dlg-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.1);
 }
 
 .l-dialog::backdrop {
-  background: rgb(0 0 0 / 0.35);
+  background: rgb(10 12 16 / 0.42);
+  backdrop-filter: blur(3px);
+  animation: dlg-fade 0.18s ease-out;
+}
+
+@keyframes dlg-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@keyframes dlg-fade {
+  from {
+    opacity: 0;
+  }
 }
 
 .l-dialog h2 {
   margin: 0 0 14px;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.l-dialog h2:first-child {
+  position: sticky;
+  top: calc(var(--dlg-py) * -1);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: calc(var(--dlg-py) * -1) calc(var(--dlg-px) * -1) 6px;
+  padding: var(--dlg-py) calc(var(--dlg-px) - 6px) 10px var(--dlg-px);
+  background: var(--card);
+}
+
+.l-dialog button.l-dlg-x {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+}
+
+.l-dialog button.l-dlg-x svg {
+  width: 16px;
+  height: 16px;
+}
+
+.l-dialog button.l-dlg-x:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+}
+
+.l-dialog .s-seg button {
+  padding: 5px 14px;
+  border: 0;
+  background: none;
+}
+
+.l-dialog .s-seg button.on,
+.l-dialog .s-seg button.on:hover {
+  background: var(--card);
+}
+
+/* 弹窗和设置里的复选框：自己画，没勾时也和输入框一个样子 */
+:is(.l-dialog, .s-row) input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid color-mix(in srgb, var(--fg) 28%, var(--card));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 3%, var(--card));
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+:is(.l-dialog, .s-row) input[type="checkbox"]:not(:disabled):hover {
+  border-color: var(--accent);
+}
+
+:is(.l-dialog, .s-row) input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 8.5 2.5 2.5L12 5.5'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+
+.s-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+:is(.l-dialog, .s-row) input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+:is(.l-dialog, .s-row) input[type="checkbox"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.l-dialog .l-buttons:last-child {
+  position: sticky;
+  bottom: calc(var(--dlg-py) * -1);
+  z-index: 3;
+  margin: 8px calc(var(--dlg-px) * -1) calc(var(--dlg-py) * -1);
+  padding: 14px var(--dlg-px) var(--dlg-py);
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--fg) 2.5%, var(--card));
 }
 
 .l-dialog form:not(.l-new-cat) {
@@ -540,8 +691,16 @@ button:disabled {
 .l-dialog label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--fg) 72%, var(--card));
+}
+
+.l-dialog label.l-check,
+.l-dialog .l-buttons label {
+  font-weight: 400;
+  color: var(--fg);
 }
 
 .l-dialog .l-buttons label {
@@ -646,22 +805,32 @@ button:disabled {
   bottom: 24px;
   transform: translateX(-50%);
   z-index: 20;
-  padding: 8px 16px;
-  border-radius: 8px;
-  background: #16181d;
-  color: #fff;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 92%, var(--bg));
+  color: var(--bg);
   font-size: 13px;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.22);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  max-width: calc(100vw - 48px);
+  animation: toast-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
 }
 
 .l-toast button {
   padding: 0;
   border: 0;
   background: none;
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--accent) 70%, var(--bg));
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1030,6 +1199,386 @@ html.widget #app {
     transform: scale(1.2);
     box-shadow: 0 0 0 4px var(--ok);
   }
+}
+
+/* 悬浮球的形象：画好的小角色或用户的图片（src/pets.ts）。data-mood 在球上（预览里在 svg 上），
+   每个部件按 data-m 只在列出的心情里显示；角色不裁圆、没有圆形阴影 */
+.w-look {
+  width: 100%;
+  height: 100%;
+}
+
+.w-ball.w-pet,
+.w-ball.w-pet.w-ring {
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.w-ball.w-pet:hover,
+.w-ball.w-pet:active {
+  transform: none;
+}
+
+.w-pet .w-look {
+  position: relative;
+  filter: drop-shadow(0 2px 2.5px rgb(0 0 0 / 0.3));
+}
+
+.w-pet .p-fig img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: none;
+  clip-path: none;
+}
+
+.w-pet .w-look > .p-fig {
+  width: 100%;
+  height: 100%;
+}
+
+.pet-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pet-zz {
+  position: absolute;
+  inset: 0;
+}
+
+.pet-svg [data-m] {
+  display: none;
+}
+
+[data-mood="idle"] [data-m~="idle"],
+[data-mood="happy"] [data-m~="happy"],
+[data-mood="alert"] [data-m~="alert"],
+[data-mood="drag"] [data-m~="drag"],
+[data-mood="sleep"] [data-m~="sleep"] {
+  display: inline;
+}
+
+.p-fig,
+.p-tail,
+.p-shadow,
+.p-eyes,
+.w-look {
+  transform-box: fill-box;
+  transform-origin: 50% 96%;
+}
+
+.pet-ghost,
+.pet-custom {
+  --idle: p-float 3s ease-in-out infinite;
+}
+
+.pet-slime {
+  --idle: p-squish 2.4s ease-in-out infinite;
+}
+
+[data-mood="idle"] .p-fig {
+  animation: var(--idle, p-breathe 3.2s ease-in-out infinite);
+}
+
+[data-mood="happy"] .p-fig {
+  animation: p-bounce 0.7s ease-in-out infinite;
+}
+
+[data-mood="alert"] .p-fig {
+  animation: p-shake 1.6s ease-in-out infinite;
+}
+
+[data-mood="drag"] .p-fig {
+  transform-origin: 50% 0;
+  animation: p-swing 0.9s ease-in-out infinite;
+}
+
+[data-mood="sleep"] .p-fig {
+  animation: p-breathe 4.5s ease-in-out infinite;
+}
+
+.p-eyes {
+  transform-origin: 50% 50%;
+  animation: p-blink 4.6s infinite;
+}
+
+.p-tail {
+  transform-origin: 0 100%;
+  animation: p-tail 2.2s ease-in-out infinite;
+}
+
+[data-mood="happy"] .p-tail {
+  animation-duration: 0.6s;
+}
+
+[data-mood="idle"] .pet-ghost .p-shadow,
+.pet-ghost[data-mood="idle"] .p-shadow {
+  transform-origin: 50% 50%;
+  animation: p-shadow 3s ease-in-out infinite;
+}
+
+.p-led {
+  animation: p-led 1.8s steps(1) infinite;
+}
+
+[data-mood="alert"] .p-led {
+  animation-duration: 0.4s;
+}
+
+.p-sweat {
+  animation: p-sweat 1.2s ease-in infinite;
+}
+
+.p-z1,
+.p-z2 {
+  animation: p-z 2.6s ease-out infinite;
+}
+
+.p-z2 {
+  animation-delay: 1.3s;
+}
+
+/* 单击、偶尔自己动一下：只播一次 */
+.w-look.p-act-poke {
+  animation: p-poke 0.45s ease-out;
+}
+
+.w-look.p-act-hop {
+  animation: p-hop 0.8s ease-out;
+}
+
+.w-look.p-act-tilt {
+  animation: p-tilt 1.6s ease-in-out;
+}
+
+.w-pet.w-added {
+  animation: p-poke 0.6s;
+}
+
+@keyframes p-breathe {
+  50% {
+    transform: scale(1.025, 0.975);
+  }
+}
+
+@keyframes p-float {
+  50% {
+    transform: translateY(-4%);
+  }
+}
+
+@keyframes p-shadow {
+  50% {
+    transform: scale(0.8);
+    opacity: 0.1;
+  }
+}
+
+@keyframes p-squish {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  40% {
+    transform: scale(1.06, 0.93);
+  }
+  70% {
+    transform: scale(0.97, 1.04);
+  }
+}
+
+@keyframes p-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.03, 0.97);
+  }
+  50% {
+    transform: translateY(-6%) scale(0.98, 1.02);
+  }
+}
+
+@keyframes p-shake {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0);
+  }
+  62% {
+    transform: rotate(-9deg);
+  }
+  70% {
+    transform: rotate(8deg);
+  }
+  78% {
+    transform: rotate(-6deg);
+  }
+  86% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes p-swing {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes p-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes p-tail {
+  50% {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes p-led {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes p-sweat {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+@keyframes p-z {
+  from {
+    transform: translate(0, 4px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(6px, -10px);
+    opacity: 0;
+  }
+}
+
+@keyframes p-poke {
+  30% {
+    transform: scale(1.12, 0.86);
+  }
+  60% {
+    transform: scale(0.94, 1.08) translateY(-6%);
+  }
+}
+
+@keyframes p-hop {
+  20% {
+    transform: scale(1.08, 0.9);
+  }
+  45% {
+    transform: translateY(-14%) scale(0.96, 1.05);
+  }
+  70% {
+    transform: translateY(0) scale(1.06, 0.94);
+  }
+}
+
+@keyframes p-tilt {
+  25%,
+  45% {
+    transform: rotate(-10deg);
+  }
+  65%,
+  85% {
+    transform: rotate(10deg);
+  }
+}
+
+/* 设置里选形象 */
+.s-pets button {
+  width: 64px;
+}
+
+.s-pet-pic {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+}
+
+.s-pet-pic img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.s-pet-pic img.s-pet-ball {
+  border-radius: 50%;
+  clip-path: circle(42.37%);
+  transform: scale(1.18);
+}
+
+.s-pet-pic.s-pet-add {
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  box-sizing: border-box;
+  color: var(--muted);
+  font-size: 22px;
+}
+
+.s-pets button {
+  position: relative;
+}
+
+.s-pet-del {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.s-pets button:hover .s-pet-del {
+  display: grid;
+}
+
+.s-pet-del-pic {
+  text-align: center;
+}
+
+.s-pet-del-pic img {
+  max-width: 120px;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.s-pets button:hover .p-fig {
+  animation: p-bounce 0.7s ease-in-out infinite;
 }
 
 /* 笔记待办 */
@@ -6895,8 +7444,9 @@ html.recpanel #app {
 
 /* 新建任务 */
 .bd-dialog {
+  --dlg-px: 20px;
+  --dlg-py: 16px;
   width: min(640px, calc(100vw - 48px));
-  padding: 16px 20px 18px;
 }
 
 .bd-dialog form.bd-new-form {
@@ -6923,6 +7473,10 @@ html.recpanel #app {
   border: 0;
   background: none;
   resize: vertical;
+}
+
+.l-dialog :is(input.bd-new-title, textarea.bd-new-desc):focus {
+  box-shadow: none;
 }
 
 .bd-props-row {
@@ -7170,4 +7724,417 @@ html.recpanel #app {
 
 .bd-comment button {
   padding: 6px 14px;
+}
+
+/* ---- 通用控件 ---- */
+
+/* 复选框、单选、滑块跟着强调色 */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+  accent-color: var(--accent);
+}
+
+/* 键盘操作时的焦点框（鼠标点击不出现） */
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* 下拉框：去掉系统箭头，换成同一个细箭头 */
+.l-dialog select,
+.s-row select,
+.pn-head select,
+.dv-bar select,
+.dv-opt select {
+  appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238b919c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 9px center;
+  background-size: 14px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.dv-bar select,
+.dv-opt select {
+  padding-right: 24px;
+  background-position: right 6px center;
+  background-size: 12px;
+}
+
+select option {
+  background: var(--card-solid);
+  color: var(--fg);
+}
+
+/* 滚动条：细、圆角，平时淡，悬停时深一点 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 40%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 70%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* 右键菜单类的弹出层淡入 */
+.l-menu {
+  animation: pop-in 0.12s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .l-dialog[open],
+  .l-dialog::backdrop,
+  .l-toast,
+  .l-menu {
+    animation: none;
+  }
+}
+
+/* 和桌宠聊天（/?petchat）：桌宠旁边的小窗，标题栏拖动 */
+html.petchat,
+html.petchat body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--card);
+}
+
+html.petchat #app {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.pc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: grab;
+  user-select: none;
+}
+
+.pc-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+.pc-avatar img,
+.pc-empty-pet img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.pc-avatar img.pc-ball,
+.pc-empty-pet img.pc-ball {
+  clip-path: circle(42.37%);
+  transform: scale(1.18);
+}
+
+.pc-name {
+  font-weight: 600;
+}
+
+.pc-model {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pc-head button {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pc-head button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pc-head button:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+}
+
+.pc-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: text;
+}
+
+.pc-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 86%;
+}
+
+.pc-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.pc-ai {
+  align-self: flex-start;
+}
+
+.pc-text {
+  padding: 8px 12px;
+  border-radius: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.pc-ai .pc-text {
+  white-space: normal;
+  border-top-left-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 6%, var(--card));
+}
+
+.pc-user .pc-text {
+  border-top-right-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.pc-error .pc-text {
+  background: color-mix(in srgb, #ef4444 12%, var(--card));
+  color: #ef4444;
+}
+
+.pc-text code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.92em;
+}
+
+.pc-text pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fg) 8%, var(--card));
+  white-space: pre;
+}
+
+.pc-text pre code {
+  padding: 0;
+  background: none;
+}
+
+.pc-text a {
+  color: var(--accent);
+}
+
+.pc-h {
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.pc-settings {
+  margin-left: 8px;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pc-tools {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.pc-msg:hover .pc-tools {
+  opacity: 1;
+}
+
+.pc-tools button {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.pc-tools button:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+}
+
+.pc-dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.pc-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: pc-dot 1.2s infinite;
+}
+
+.pc-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.pc-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pc-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.pc-empty {
+  margin: auto 0;
+  text-align: center;
+  user-select: none;
+}
+
+.pc-empty-pet {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto;
+}
+
+.pc-empty p {
+  margin: 10px 0 14px;
+  line-height: 1.7;
+}
+
+.pc-empty .muted {
+  font-size: 12px;
+}
+
+.pc-sugs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pc-sugs button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.pc-sugs button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pc-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.pc-input textarea {
+  flex: 1;
+  box-sizing: border-box;
+  max-height: 120px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fg) 3%, var(--card));
+  color: var(--fg);
+  font: inherit;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+
+.pc-input textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.pc-input button.pc-send {
+  padding: 8px 16px;
+  border-radius: 10px;
+}
+
+.pc-input button.pc-stop {
+  background: #ef4444;
 }

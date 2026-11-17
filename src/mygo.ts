@@ -4,6 +4,24 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/**
+ * AIChatMessage is a turn of the chat with the floating ball's pet: role is
+ * user or assistant.
+ */
+export interface AIChatMessage {
+  role: string;
+  content: string;
+}
+
+/**
+ * AIChatRequest is the chat so far, ending with the user's turn, and the
+ * pet that answers.
+ */
+export interface AIChatRequest {
+  messages: AIChatMessage[];
+  pet: string;
+}
+
 /** AIChunkEvent is a piece of an AI writing request's answer. */
 export interface AIChunkEvent {
   id: string;
@@ -994,6 +1012,15 @@ export interface WidgetSettings {
    */
   tuck: boolean;
   /**
+   * Pet is how the ball looks: the ball, one of the drawn pets, or
+   * custom for Image, one of Images: the user's pictures, files of the
+   * appearance folder that PickPetImage adds and RemovePetImage deletes.
+   * Save keeps Images as they are, and takes only an Image of them.
+   */
+  pet: string;
+  image: string;
+  images: string[];
+  /**
    * X and Y are the window's position, kept by dragging it; Placed is
    * false until then. Save keeps them as they are.
    */
@@ -1262,6 +1289,20 @@ export const Settings = {
   pickBackground(): Promise<boolean> {
     return call("Settings.PickBackground");
   },
+  /**
+   * PickPetImage asks for a picture, a GIF moving too, adds it to the floating
+   * ball's looks and makes it the one. It returns false when the user cancels.
+   */
+  pickPetImage(): Promise<boolean> {
+    return call("Settings.PickPetImage");
+  },
+  /**
+   * RemovePetImage deletes one of the floating ball's pictures; the ball
+   * shows another of them, or the ball, when it was the one.
+   */
+  removePetImage(name: string): Promise<void> {
+    return call("Settings.RemovePetImage", name);
+  },
   /** ResetWidget puts the floating ball back in its first place. */
   resetWidget(): Promise<void> {
     return call("Settings.ResetWidget");
@@ -1292,6 +1333,13 @@ export const Widget = {
    */
   drag(): Promise<void> {
     return call("Widget.Drag");
+  },
+  /**
+   * Idle tells how many seconds ago the keyboard or mouse were last used: a
+   * pet falls asleep when nobody is at the computer.
+   */
+  idle(): Promise<number> {
+    return call("Widget.Idle");
   },
   /** Menu shows the ball's menu at the pointer. */
   menu(): Promise<void> {
@@ -1340,6 +1388,13 @@ export const AI = {
   /** Cancel stops a request. */
   cancel(id: string): Promise<void> {
     return call("AI.Cancel", id);
+  },
+  /**
+   * Chat sends the chat with the floating ball's pet and returns the
+   * request's ID; AIChunk brings the answer.
+   */
+  chat(req: AIChatRequest): Promise<string> {
+    return call("AI.Chat", req);
   },
   /** Models lists the models of a service, which need not be saved yet. */
   models(cfg: AISettings): Promise<string[]> {
@@ -1666,6 +1721,33 @@ export const Clips = {
   /** Pin keeps an item, however many come after it, or lets it go again. */
   pin(id: string, on: boolean): Promise<void> {
     return call("Clips.Pin", id, on);
+  },
+} as const;
+
+/**
+ * PetChat is the chat with the floating ball's pet: a long press on it, or
+ * its menu, brings it up beside the ball, and the AI of the settings
+ * answers as the pet (AI.Chat). Closing it hides it, the chat kept.
+ */
+export const PetChat = {
+  /** Drag moves the chat with the pointer until the mouse button is released. */
+  drag(): Promise<void> {
+    return call("PetChat.Drag");
+  },
+  /** Hide hides the chat. */
+  hide(): Promise<void> {
+    return call("PetChat.Hide");
+  },
+  /**
+   * Open shows the chat beside the ball, or in the work area's corner when
+   * the ball is hidden, and gives it the keys.
+   */
+  open(): Promise<void> {
+    return call("PetChat.Open");
+  },
+  /** OpenSettings shows the AI's settings in the toolbox. */
+  openSettings(): Promise<void> {
+    return call("PetChat.OpenSettings");
   },
 } as const;
 
@@ -1998,6 +2080,8 @@ export const events = {
    * use for the notes.
    */
   todoAlertsChanged: event<Todo[]>("todoAlertsChanged"),
+  /** PetChatOpened tells the chat's page it came up, to take the keys. */
+  petChatOpened: event<number>("petChatOpened"),
   /**
    * RecordChanged tells the recording's panel, and the tool's page, what
    * the recording is doing.

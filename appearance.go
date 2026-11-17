@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -44,7 +45,7 @@ func normalizeAppearance(a *AppearanceSettings) {
 		a.Accent = d.Accent
 	}
 	a.Accent = strings.ToLower(a.Accent)
-	if strings.ContainsAny(a.Background, `/\:`) || strings.HasPrefix(a.Background, ".") {
+	if !safeFileName(a.Background) {
 		a.Background = ""
 	}
 	if a.Opacity == 0 {
@@ -57,6 +58,12 @@ func normalizeAppearance(a *AppearanceSettings) {
 		a.Cards = d.Cards
 	}
 	a.Cards = min(max(a.Cards, 40), 100)
+}
+
+// safeFileName reports whether s names a file of the appearance folder
+// itself, or is empty.
+func safeFileName(s string) bool {
+	return !strings.ContainsAny(s, `/\:`) && !strings.HasPrefix(s, ".")
 }
 
 func isHexColor(s string) bool {
@@ -90,8 +97,69 @@ func serveAppearance() {
 // PickBackground asks for a picture and makes it the main window's
 // background. It returns false when the user cancels.
 func (st *Settings) PickBackground() (bool, error) {
+	return st.pickPicture("选择背景图片", "bg-", func(s *AppSettings, name string) { s.Appearance.Background = name })
+}
+
+// maxPetImages is how many pictures of their own the user may keep for the
+// floating ball.
+const maxPetImages = 20
+
+// PickPetImage asks for a picture, a GIF moving too, adds it to the floating
+// ball's looks and makes it the one. It returns false when the user cancels.
+func (st *Settings) PickPetImage() (bool, error) {
+	if len(st.current().Widget.Images) >= maxPetImages {
+		return false, fmt.Errorf("最多 %d 张自定义形象，先删掉几张", maxPetImages)
+	}
+	return st.pickPicture("选择悬浮球的形象", "pet-", func(s *AppSettings, name string) {
+		s.Widget.Pet, s.Widget.Image, s.Widget.Images = "custom", name, append(s.Widget.Images, name)
+	})
+}
+
+// RemovePetImage deletes one of the floating ball's pictures; the ball
+// shows another of them, or the ball, when it was the one.
+func (st *Settings) RemovePetImage(name string) error {
+	err := st.change(func(s *AppSettings) {
+		w := &s.Widget
+		w.Images = slices.DeleteFunc(w.Images, func(n string) bool { return n == name })
+		if w.Image == name {
+			w.Image = ""
+		}
+	})
+	if err != nil {
+		return err
+	}
+	cleanAppearance(st.current())
+	return nil
+}
+
+// normalizePetImages keeps the pictures that are files of the appearance
+// folder, each once, and an Image of them; custom without any picture is
+// the ball.
+func normalizePetImages(w *WidgetSettings) {
+	images := []string{}
+	for _, n := range append(w.Images, w.Image) {
+		if n != "" && safeFileName(n) && !slices.Contains(images, n) && len(images) < maxPetImages {
+			images = append(images, n)
+		}
+	}
+	w.Images = images
+	if !slices.Contains(images, w.Image) {
+		w.Image = ""
+	}
+	if w.Pet == "custom" && w.Image == "" {
+		if len(images) > 0 {
+			w.Image = images[0]
+		} else {
+			w.Pet = "ball"
+		}
+	}
+}
+
+// pickPicture asks for a picture, copies it into the appearance folder
+// under a new name and lets set put that name in the settings.
+func (st *Settings) pickPicture(title, prefix string, set func(s *AppSettings, name string)) (bool, error) {
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-		Title:   "选择背景图片",
+		Title:   title,
 		Filters: []mygo.FileFilter{{Name: "图片", Extensions: []string{"png", "jpg", "jpeg", "webp", "gif", "bmp"}}},
 	})
 	if err != nil || len(paths) == 0 {
@@ -104,15 +172,15 @@ func (st *Settings) PickBackground() (bool, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return false, err
 	}
-	name := "bg-" + time.Now().Format("20060102150405") + strings.ToLower(filepath.Ext(paths[0]))
+	name := prefix + time.Now().Format("20060102150405") + strings.ToLower(filepath.Ext(paths[0]))
 	if err := copyFile(paths[0], filepath.Join(dir, name)); err != nil {
 		return false, err
 	}
-	if err := st.change(func(s *AppSettings) { s.Appearance.Background = name }); err != nil {
+	if err := st.change(func(s *AppSettings) { set(s, name) }); err != nil {
 		os.Remove(filepath.Join(dir, name))
 		return false, err
 	}
-	cleanBackgrounds(name)
+	cleanAppearance(st.current())
 	return true, nil
 }
 
@@ -121,12 +189,13 @@ func (st *Settings) ClearBackground() error {
 	if err := st.change(func(s *AppSettings) { s.Appearance.Background = "" }); err != nil {
 		return err
 	}
-	cleanBackgrounds("")
+	cleanAppearance(st.current())
 	return nil
 }
 
-// cleanBackgrounds deletes the pictures of the appearance folder but keep.
-func cleanBackgrounds(keep string) {
+// cleanAppearance deletes the pictures of the appearance folder that are
+// neither the background nor among the floating ball's.
+func cleanAppearance(s AppSettings) {
 	dir, err := configPath("appearance")
 	if err != nil {
 		return
@@ -136,7 +205,7 @@ func cleanBackgrounds(keep string) {
 		return
 	}
 	for _, e := range entries {
-		if !e.IsDir() && e.Name() != keep {
+		if !e.IsDir() && e.Name() != s.Appearance.Background && !slices.Contains(s.Widget.Images, e.Name()) {
 			os.Remove(filepath.Join(dir, e.Name()))
 		}
 	}

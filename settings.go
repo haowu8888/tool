@@ -105,6 +105,13 @@ type WidgetSettings struct {
 	// Tuck hides half of a stuck ball behind the edge until the pointer
 	// comes over it.
 	Tuck bool `json:"tuck"`
+	// Pet is how the ball looks: the ball, one of the drawn pets, or
+	// custom for Image, one of Images: the user's pictures, files of the
+	// appearance folder that PickPetImage adds and RemovePetImage deletes.
+	// Save keeps Images as they are, and takes only an Image of them.
+	Pet    string   `json:"pet"`
+	Image  string   `json:"image"`
+	Images []string `json:"images"`
 	// X and Y are the window's position, kept by dragging it; Placed is
 	// false until then. Save keeps them as they are.
 	X      int  `json:"x"`
@@ -151,7 +158,7 @@ var defaultSettings = AppSettings{
 	Theme:       "system",
 	CloseAction: "hide",
 	StartHidden: true,
-	Widget:      WidgetSettings{Size: 56, Opacity: 0.9, Snap: true, Tuck: true},
+	Widget:      WidgetSettings{Size: 56, Opacity: 0.9, Snap: true, Tuck: true, Pet: "ball"},
 	Reminder:    ReminderSettings{AutoHide: 3, Sound: true},
 	Clipboard:   ClipSettings{Max: 300},
 	Monitor: MonitorSettings{
@@ -205,7 +212,10 @@ func (st *Settings) Save(s AppSettings) error {
 		w, o, bg := cur.Widget, cur.Monitor.Overlay, cur.Appearance.Background
 		*cur = s
 		cur.Appearance.Background = bg
-		cur.Widget.X, cur.Widget.Y, cur.Widget.Placed = w.X, w.Y, w.Placed
+		cur.Widget.X, cur.Widget.Y, cur.Widget.Placed, cur.Widget.Images = w.X, w.Y, w.Placed, w.Images
+		if !slices.Contains(w.Images, cur.Widget.Image) {
+			cur.Widget.Image = w.Image
+		}
 		cur.Monitor.Overlay.X, cur.Monitor.Overlay.Y, cur.Monitor.Overlay.Placed = o.X, o.Y, o.Placed
 	})
 }
@@ -331,9 +341,13 @@ func normalize(s *AppSettings) {
 	if s.CloseAction != "quit" {
 		s.CloseAction = "hide"
 	}
-	if s.Widget.Size < 36 || s.Widget.Size > 96 {
+	if s.Widget.Size < 36 || s.Widget.Size > maxWidgetSize {
 		s.Widget.Size = defaultSettings.Widget.Size
 	}
+	if !slices.Contains(widgetPets, s.Widget.Pet) {
+		s.Widget.Pet = defaultSettings.Widget.Pet
+	}
+	normalizePetImages(&s.Widget)
 	s.Widget.Opacity = min(max(s.Widget.Opacity, 0.3), 1)
 	if s.Tools == nil {
 		s.Tools = []ToolSetting{}

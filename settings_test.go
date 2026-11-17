@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -108,5 +109,23 @@ func TestNormalizeAppearance(t *testing.T) {
 	want = AppearanceSettings{Style: "mint", Accent: "#8b5cf6", Background: "bg-1.jpg", Opacity: 100, Dim: 0, Blur: 12, Cards: 85}
 	if a != want {
 		t.Errorf("got %+v, want %+v", a, want)
+	}
+}
+
+func TestNormalizePetImages(t *testing.T) {
+	w := WidgetSettings{Pet: "custom", Image: "pet-2.png", Images: []string{"pet-1.png", "../x.png", "pet-1.png"}}
+	normalizePetImages(&w)
+	if !reflect.DeepEqual(w.Images, []string{"pet-1.png", "pet-2.png"}) || w.Image != "pet-2.png" {
+		t.Fatalf("an older image joins the list, the unsafe and twice named go: %+v", w)
+	}
+	w.Image = ""
+	normalizePetImages(&w)
+	if w.Image != "pet-1.png" || w.Pet != "custom" {
+		t.Fatalf("custom without an image shows the first: %+v", w)
+	}
+	w = WidgetSettings{Pet: "custom"}
+	normalizePetImages(&w)
+	if w.Pet != "ball" || w.Images == nil {
+		t.Fatalf("custom without pictures is the ball: %+v", w)
 	}
 }

@@ -3,6 +3,7 @@ import { Updates, VirtualScreen, events, type DisplayInfo, type UpdateState } fr
 import { icons } from "./icons";
 import { markMainWindow } from "./appearance";
 import { clipsTool, showClips } from "./clips";
+import { showPetChat } from "./petchat";
 import { focusSearch, launcherTool } from "./launcher";
 import { monitorTool } from "./monitor";
 import { servicesTool } from "./services";
@@ -272,6 +273,8 @@ if (params.has("widget")) {
   showShot(app, Number(params.get("shot")));
 } else if (params.has("clips")) {
   showClips(app);
+} else if (params.has("petchat")) {
+  showPetChat(app);
 } else if (params.has("longframe")) {
   showScrollFrame(app);
 } else if (params.has("rec")) {

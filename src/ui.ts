@@ -9,6 +9,15 @@ export function openDialog(html: string) {
   dlg.addEventListener("close", () => dlg.remove());
   dlg.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => dlg.close()));
   dlg.showModal();
+  // A titled dialog gets a ✕ beside its title, which stays put as it
+  // scrolls; added once open, so the first field still takes the focus.
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "l-dlg-x";
+  x.title = "关闭（Esc）";
+  x.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>`;
+  x.addEventListener("click", () => dlg.close());
+  dlg.querySelector("h2:first-child")?.append(x);
   return dlg;
 }
 
