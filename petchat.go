@@ -18,13 +18,16 @@ var PetChatOpened = mygo.NewEvent[int]("petChatOpened")
 
 // PetChat is the chat with the floating ball's pet: a long press on it, or
 // its menu, brings it up beside the ball, and the AI of the settings
-// answers as the pet (AI.Chat). Closing it hides it, the chat kept.
+// answers as the pet (AI.Chat). Closing it hides it, the chat kept. It is
+// not on top of the others: clicked away, it goes behind the window clicked
+// rather than covering it, and the next long press brings it back.
 type PetChat struct {
 	mu  sync.Mutex
 	win *mygo.Window
 
 	widget       *Widget
 	openSettings func() // shows the AI's settings
+	onMove       func() // after it showed, moved or hid: the reminder bubble keeps clear of it
 }
 
 // Open shows the chat beside the ball, or in the work area's corner when
@@ -43,7 +46,6 @@ func (p *PetChat) Open() {
 			MaxHeight:       petChatHeight,
 			Hidden:          true,
 			Frameless:       true,
-			AlwaysOnTop:     true,
 			SkipTaskbar:     true,
 			DisableResize:   true,
 			DisableMinimize: true,
@@ -68,10 +70,27 @@ func (p *PetChat) Open() {
 	win.Show()
 	win.Focus()
 	PetChatOpened.Broadcast(0)
+	p.moved()
 	// The ball is a window of its own; the chat may come up behind the
 	// window in front, without the keys.
 	time.Sleep(60 * time.Millisecond)
 	forceFocus(win.NativeHandle())
+}
+
+// bounds is where the chat shows, or false when it is hidden.
+func (p *PetChat) bounds() (mygo.Rectangle, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.win == nil || !p.win.IsVisible() {
+		return mygo.Rectangle{}, false
+	}
+	return p.win.Bounds(), true
+}
+
+func (p *PetChat) moved() {
+	if p.onMove != nil {
+		p.onMove()
+	}
 }
 
 // place is where the chat shows: beside the ball on the side with room,
@@ -100,6 +119,7 @@ func (p *PetChat) Hide() {
 	p.mu.Unlock()
 	if win != nil {
 		win.Hide()
+		p.moved()
 	}
 }
 
@@ -127,6 +147,7 @@ func (p *PetChat) Drag() {
 		}
 		x, y = keepOnScreen(x, y, petChatWidth, false)
 		win.SetPosition(x, y)
+		p.moved()
 	}()
 }
 

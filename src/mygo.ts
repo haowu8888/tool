@@ -1727,7 +1727,9 @@ export const Clips = {
 /**
  * PetChat is the chat with the floating ball's pet: a long press on it, or
  * its menu, brings it up beside the ball, and the AI of the settings
- * answers as the pet (AI.Chat). Closing it hides it, the chat kept.
+ * answers as the pet (AI.Chat). Closing it hides it, the chat kept. It is
+ * not on top of the others: clicked away, it goes behind the window clicked
+ * rather than covering it, and the next long press brings it back.
  */
 export const PetChat = {
   /** Drag moves the chat with the pointer until the mouse button is released. */

@@ -1,0 +1,7 @@
+# The repository keeps LF; cmd scripts get CRLF in the working tree, as
+# cmd.exe wants, so that git on Windows and in the container agree.
+* text=auto
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.ico binary

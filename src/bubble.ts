@@ -2,7 +2,7 @@
 // to do, put off or dismiss, the services that went down and the Flow
 // runs that failed.
 import { Flow, Notes, Reminder, Services, events, type FlowAlert, type ServiceView, type Todo } from "./mygo";
-import { REPEATS, dueInfo } from "./notes";
+import { REPEATS, dueInfo } from "./due";
 import { settings } from "./settings";
 import { chime, esc } from "./ui";
 

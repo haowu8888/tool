@@ -4,7 +4,7 @@ import { onFileDrop } from "mygo-runtime";
 import { icons as toolIcons } from "./icons";
 import { Launcher, events, type InstalledApp, type LauncherApp, type LauncherData } from "./mygo";
 import { shortcutKeys } from "./settings";
-import { errorText, esc, openDialog, showError, toast } from "./ui";
+import { baseName, errorText, esc, openDialog, showError, toast } from "./ui";
 
 const ALL = "*"; // the 全部 filter
 const NONE = ""; // the category of uncategorized apps
@@ -601,16 +601,4 @@ export function initialsIndex(name: string, q: string) {
     if (k === q.length) return i;
   }
   return -1;
-}
-
-// baseName returns a path's file name without its extension, or a URL's
-// host.
-export function baseName(path: string) {
-  if (path.includes("://")) {
-    try {
-      return new URL(path).hostname;
-    } catch {}
-  }
-  const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
-  return name.replace(/(\.exe)?\.(exe|lnk|url|bat|cmd|appref-ms|msc)$/i, "") || path;
 }

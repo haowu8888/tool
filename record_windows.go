@@ -429,7 +429,7 @@ func newMP4Writer(path string, w, h, fps int, audio, hardware bool) (m *mp4Write
 	setGUID(out, &mfMTSubtype, &mfVideoFormatH264)
 	setU32(out, &mfMTAvgBitrate, uint32(bitrate))
 	setU32(out, &mfMTInterlaceMode, 2) // progressive
-	setU32(out, &mfMTMpeg2Profile, 77)  // Main, which every player takes
+	setU32(out, &mfMTMpeg2Profile, 77) // Main, which every player takes
 	setU64(out, &mfMTFrameSize, uint32(w), uint32(h))
 	setU64(out, &mfMTFrameRate, uint32(fps), 1)
 	setU64(out, &mfMTPixelAspect, 1, 1)

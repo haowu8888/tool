@@ -14,7 +14,7 @@ var (
 )
 
 const (
-	afInet6               = 23
+	afInet6                = 23
 	tcpTableOwnerPIDListen = 3
 	tcpTableOwnerPIDAll    = 5
 	udpTableOwnerPID       = 1

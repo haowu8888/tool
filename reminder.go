@@ -26,6 +26,7 @@ type Reminder struct {
 	hide      *time.Timer // folds it away after the minutes of the settings
 
 	widget   *Widget
+	chat     *PetChat // the bubble keeps clear of the pet's chat
 	settings *Settings
 	open     func() // shows the todos in the toolbox
 }
@@ -143,6 +144,11 @@ func (r *Reminder) place() {
 		y = by + size/2 - h/2
 		x = min(max(x, wa.X), wa.X+wa.Width-bubbleWidth)
 		y = min(max(y, wa.Y), wa.Y+wa.Height-h)
+		if r.chat != nil {
+			if c, ok := r.chat.bounds(); ok {
+				x, y = clearOf(x, y, bubbleWidth, h, c, wa)
+			}
+		}
 	} else {
 		wa := mygo.Screen.PrimaryDisplay().WorkArea
 		x, y = wa.X+wa.Width-bubbleWidth-16, wa.Y+wa.Height-h-16
@@ -202,4 +208,30 @@ func (r *Reminder) stopHide() {
 		r.hide.Stop()
 		r.hide = nil
 	}
+}
+
+// clearOf moves a window of the size at x, y off the rectangle c: above it,
+// below it, or past it on the side away from the screen's nearer edge, as
+// the work area has room; it stays where it is when there is none.
+func clearOf(x, y, w, h int, c, wa mygo.Rectangle) (int, int) {
+	if x >= c.X+c.Width || x+w <= c.X || y >= c.Y+c.Height || y+h <= c.Y {
+		return x, y
+	}
+	const gap = 8
+	if c.Y-gap-h >= wa.Y {
+		return x, c.Y - gap - h
+	}
+	if c.Y+c.Height+gap+h <= wa.Y+wa.Height {
+		return x, c.Y + c.Height + gap
+	}
+	if c.X-gap-w >= wa.X && c.X+c.Width/2 > wa.X+wa.Width/2 {
+		return c.X - gap - w, y
+	}
+	if c.X+c.Width+gap+w <= wa.X+wa.Width {
+		return c.X + c.Width + gap, y
+	}
+	if c.X-gap-w >= wa.X {
+		return c.X - gap - w, y
+	}
+	return x, y
 }

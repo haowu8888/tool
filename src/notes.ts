@@ -7,6 +7,7 @@ import { icons } from "./icons";
 import { Launcher, Notes, events, type Note, type NotesData, type SubTask, type Todo } from "./mygo";
 import { shortcutKeys } from "./settings";
 import { errorText, esc, lightbox, openDialog, showError, toast } from "./ui";
+import { REPEATS, WEEKDAYS, dueInfo, startOfDay } from "./due";
 
 type View = "todos" | "notes";
 
@@ -476,8 +477,6 @@ function subsChip(t: Todo) {
   return `<button class="n-subs-n${done === subs.length ? " all" : ""}" title="${open ? "收起子项" : "展开子项"}" style="--pct:${pct}%"><span class="n-subs-bar"></span>${done}/${subs.length}${open ? " ▾" : " ▸"}</button>`;
 }
 
-// The ways a todo repeats, for Todo.repeat.
-export const REPEATS: Record<string, string> = { day: "每天", weekday: "工作日", week: "每周", month: "每月", year: "每年" };
 
 function dueTitle(t: Todo) {
   let s = t.due!.replace("T", " ");
@@ -643,38 +642,14 @@ function parseTime(s: string): string | null {
   return `${pad(h)}:${pad(min)}`;
 }
 
-const WEEKDAYS = "日一二三四五六";
-
 const pad = (n: number) => String(n).padStart(2, "0");
 
 function ymd(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
 function addDays(d: Date, n: number) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-}
-
-// dueInfo describes a todo's due, 2026-11-12 or 2026-11-12T15:00: how many
-// days away its date is, whether it passed, and a label such as 明天 15:00.
-export function dueInfo(due: string, now = new Date()) {
-  const [y, m, d] = due.slice(0, 10).split("-").map(Number) as [number, number, number];
-  const date = new Date(y, m - 1, d);
-  const time = due.slice(11);
-  const days = Math.round((date.getTime() - startOfDay(now).getTime()) / 86400000);
-  const at = time ? new Date(`${due.slice(0, 10)}T${time}`) : null;
-  const overdue = at ? at < now : days < 0;
-  const names: Record<number, string> = { [-1]: "昨天", 0: "今天", 1: "明天", 2: "后天" };
-  let label = names[days];
-  if (!label) {
-    label = y === now.getFullYear() ? `${m}月${d}日` : `${y}年${m}月${d}日`;
-    if (Math.abs(days) < 7) label += ` 周${WEEKDAYS[date.getDay()]}`;
-  }
-  return { days, overdue, label: time ? `${label} ${time}` : label };
 }
 
 // parseQuick takes the day and the time out of a new todo's text, as in

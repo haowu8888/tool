@@ -3,8 +3,8 @@
 import { onFileDrop } from "mygo-runtime";
 import { Flow, Launcher, Notes, PetChat, Reminder, Services, Settings, VirtualScreen, Widget, events, type FlowAlert, type LauncherApp, type ServiceView, type Todo, type WidgetSettings } from "./mygo";
 import { backgroundURL } from "./appearance";
-import { baseName } from "./launcher";
 import { isDrawn, petSVG, zzSVG, type Mood } from "./pets";
+import { baseName } from "./ui";
 import icon from "./assets/widget.png";
 
 // dragThreshold is how far the pointer moves before a press becomes a drag.
@@ -44,7 +44,15 @@ export function showWidget(app: HTMLElement) {
     mood();
   };
   void Settings.get().then((s) => setLook(s.widget));
-  events.settingsChanged.on((s) => setLook(s.widget));
+  events.settingsChanged.on((s) => {
+    // Go keeps where a dragged ball was dropped: the drag is over, even
+    // when the release came after the pointer left the window.
+    if (dragging) {
+      dragging = false;
+      mood();
+    }
+    setLook(s.widget);
+  });
 
   // A pet's mood follows what goes on: carried, alarmed, the pointer over
   // it, or nobody at the computer.

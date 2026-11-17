@@ -118,3 +118,15 @@ export function lightbox(srcs: string[], at = 0) {
   (document.querySelector("dialog[open]") ?? document.body).append(box);
   show();
 }
+
+// baseName returns a path's file name without its extension, or a URL's
+// host.
+export function baseName(path: string) {
+  if (path.includes("://")) {
+    try {
+      return new URL(path).hostname;
+    } catch {}
+  }
+  const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
+  return name.replace(/(\.exe)?\.(exe|lnk|url|bat|cmd|appref-ms|msc)$/i, "") || path;
+}

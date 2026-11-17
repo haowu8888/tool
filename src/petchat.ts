@@ -118,12 +118,24 @@ export function showPetChat(app: HTMLElement) {
     render();
     input.value = "";
     fit();
+    early = [];
     try {
       const id = await AI.chat({ messages: turns.slice(0, -1).filter((t) => !t.error).map(({ role, content }) => ({ role, content })), pet });
-      if (busy?.turn === turn) busy.id = id;
+      // Stopped or cleared meanwhile: there was no ID to cancel it by.
+      if (busy?.turn !== turn) return void AI.cancel(id);
+      busy.id = id;
+      for (const c of early.splice(0)) if (c.id === id && busy?.turn === turn) take(turn, c);
     } catch (e) {
-      finish(turn, e instanceof Error ? e.message : String(e));
+      if (busy?.turn === turn) finish(turn, e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const take = (turn: Turn, c: AIChunkEvent) => {
+    if (c.text) {
+      turn.content += c.text;
+      redrawLast();
+    }
+    if (c.done) finish(turn, c.error);
   };
 
   const finish = (turn: Turn, error?: string) => {
@@ -137,18 +149,16 @@ export function showPetChat(app: HTMLElement) {
     }
     if (busy?.turn === turn) busy = null;
     setBusy();
-    redrawLast();
+    if (turns[turns.length - 1] === turn) redrawLast();
     store(turns);
   };
 
+  // Pieces may come before AI.chat gives the request's ID: they wait for it.
+  let early: AIChunkEvent[] = [];
   events.aiChunk.on((c: AIChunkEvent) => {
-    if (!busy || c.id !== busy.id) return;
-    const turn = busy.turn;
-    if (c.text) {
-      turn.content += c.text;
-      redrawLast();
-    }
-    if (c.done) finish(turn, c.error);
+    if (!busy) return;
+    if (!busy.id) early.push(c);
+    else if (c.id === busy.id) take(busy.turn, c);
   });
 
   // The input grows with what is typed, up to a few lines.
@@ -167,6 +177,7 @@ export function showPetChat(app: HTMLElement) {
     e.preventDefault();
     if (busy) {
       if (busy.id) void AI.cancel(busy.id);
+      if (!busy.turn.content) busy.turn.content = "（已停止）";
       finish(busy.turn);
     } else void ask(input.value);
   });

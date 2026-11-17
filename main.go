@@ -44,6 +44,7 @@ func main() {
 	shot.rec = record
 	clips := &Clips{settings: settings}
 	petChat := &PetChat{widget: widget}
+	reminder.chat = petChat
 	services := &Services{}
 	flow := &Flow{}
 	dev := &Dev{shot: shot}
@@ -253,6 +254,7 @@ func main() {
 		shot.onQR = dev.found
 		widget.onMove = func() { reminder.place() }
 		petChat.openSettings = func() { showTool("settings") }
+		petChat.onMove = func() { reminder.place() }
 		overlay.open = func() { showTool("monitor") }
 		go notes.watch()
 		widget.menu = func() *mygo.Menu {
