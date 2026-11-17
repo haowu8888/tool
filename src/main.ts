@@ -1,6 +1,7 @@
 // VirtualScreen and events are generated from the Go code by `mygo generate`.
 import { Updates, VirtualScreen, events, type DisplayInfo, type UpdateState } from "./mygo";
 import { icons } from "./icons";
+import { markMainWindow } from "./appearance";
 import { clipsTool, showClips } from "./clips";
 import { focusSearch, launcherTool } from "./launcher";
 import { monitorTool } from "./monitor";
@@ -280,5 +281,6 @@ if (params.has("widget")) {
 } else if (params.has("pin")) {
   void showPin(app, params.get("pin")!);
 } else {
+  markMainWindow();
   showToolbox();
 }

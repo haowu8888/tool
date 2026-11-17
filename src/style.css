@@ -41,6 +41,41 @@ body {
   color: var(--fg);
 }
 
+/* 背景图片（设置 → 外观）：只在主窗口。图片和遮罩垫在最底下，卡片按设置变透明；
+   --card-solid 在 :root 上算好，弹出层用它保持不透明 */
+:root {
+  --card-solid: var(--card);
+}
+
+:root[data-bg] body.main-window::before,
+:root[data-bg] body.main-window::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+}
+
+:root[data-bg] body.main-window::before {
+  inset: calc(var(--bg-blur) * -2);
+  z-index: -2;
+  background: var(--bg-image) center / cover no-repeat;
+  filter: blur(var(--bg-blur));
+  opacity: var(--bg-opacity);
+}
+
+:root[data-bg] body.main-window::after {
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--bg) var(--bg-dim), transparent);
+}
+
+:root[data-bg] body.main-window {
+  --card: color-mix(in srgb, var(--card-solid) var(--card-alpha), transparent);
+}
+
+:root[data-bg] body.main-window :is(dialog, .l-toast, .l-menu, .e-menu, .e-toolbar, .bd-menu) {
+  --card: var(--card-solid);
+}
+
 #app {
   display: flex;
   height: 100%;
@@ -754,6 +789,101 @@ label.s-row {
   border-radius: 6px;
   background: var(--bg);
   color: inherit;
+}
+
+/* 外观：风格色卡、强调色、背景图缩略图 */
+.s-look-row {
+  flex-wrap: wrap;
+}
+
+.s-styles,
+.s-accents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.s-styles button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.s-styles button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.s-style-sw {
+  display: block;
+  width: 52px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 7px 0 0 9px;
+  border: 1px solid var(--p-line);
+  border-radius: 7px;
+  background: var(--p-bg);
+}
+
+.s-style-sw i {
+  display: block;
+  height: 100%;
+  border: 1px solid var(--p-line);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 5px 0 0 0;
+  background: linear-gradient(var(--p-fg), var(--p-fg)) 7px 7px / 18px 3px no-repeat, var(--p-card);
+}
+
+.s-accents button,
+.s-accent-custom {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sw);
+  cursor: pointer;
+}
+
+.s-accents .on {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--sw);
+}
+
+.s-accent-custom {
+  overflow: hidden;
+  background: var(--sw, conic-gradient(#ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444));
+}
+
+.s-accent-custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.s-bg-row[hidden],
+.s-bg-thumb[hidden] {
+  display: none;
+}
+
+.s-bg-thumb {
+  width: 54px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: center / cover no-repeat;
 }
 
 .s-range {

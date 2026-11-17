@@ -48,6 +48,8 @@ type AppSettings struct {
 	Update UpdateSettings `json:"update"`
 	// Launcher is the quick launcher's.
 	Launcher LauncherSettings `json:"launcher"`
+	// Appearance is the style, accent color and background picture.
+	Appearance AppearanceSettings `json:"appearance"`
 }
 
 // LauncherSettings are the quick launcher's.
@@ -158,11 +160,12 @@ var defaultSettings = AppSettings{
 		SensorsURL: "http://127.0.0.1:8085",
 		Overlay:    OverlaySettings{Items: []string{"cpu", "cpuTemp", "mem", "gpu", "diskTemp", "net"}, Opacity: 0.9},
 	},
-	Shot:     ShotSettings{To: "auto", Engine: "auto"},
-	Record:   RecordSettings{FPS: 30, Cursor: true, Sound: true},
-	Update:   UpdateSettings{Auto: true},
-	Launcher: LauncherSettings{HideAfterLaunch: true},
-	Tools:    []ToolSetting{},
+	Shot:       ShotSettings{To: "auto", Engine: "auto"},
+	Record:     RecordSettings{FPS: 30, Cursor: true, Sound: true},
+	Update:     UpdateSettings{Auto: true},
+	Launcher:   LauncherSettings{HideAfterLaunch: true},
+	Appearance: AppearanceSettings{Style: "default", Accent: "#3b82f6", Opacity: 100, Dim: 40, Cards: 85},
+	Tools:      []ToolSetting{},
 }
 
 // Settings keeps the settings and applies them.
@@ -182,7 +185,8 @@ func (st *Settings) Get() AppSettings {
 	return s
 }
 
-// Save replaces the settings, but for the floating ball's position.
+// Save replaces the settings, but for the floating ball's position and the
+// background picture, which PickBackground and ClearBackground change.
 func (st *Settings) Save(s AppSettings) error {
 	s.Shortcuts = normalizeShortcuts(s.Shortcuts)
 	for i, a := range s.Shortcuts {
@@ -198,8 +202,9 @@ func (st *Settings) Save(s AppSettings) error {
 		}
 	}
 	return st.change(func(cur *AppSettings) {
-		w, o := cur.Widget, cur.Monitor.Overlay
+		w, o, bg := cur.Widget, cur.Monitor.Overlay, cur.Appearance.Background
 		*cur = s
+		cur.Appearance.Background = bg
 		cur.Widget.X, cur.Widget.Y, cur.Widget.Placed = w.X, w.Y, w.Placed
 		cur.Monitor.Overlay.X, cur.Monitor.Overlay.Y, cur.Monitor.Overlay.Placed = o.X, o.Y, o.Placed
 	})
@@ -322,6 +327,7 @@ func normalize(s *AppSettings) {
 	if !slices.Contains([]string{"system", "light", "dark"}, s.Theme) {
 		s.Theme = defaultSettings.Theme
 	}
+	normalizeAppearance(&s.Appearance)
 	if s.CloseAction != "quit" {
 		s.CloseAction = "hide"
 	}

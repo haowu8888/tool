@@ -93,3 +93,20 @@ func TestLoadKeepsDefaults(t *testing.T) {
 		t.Errorf("the defaults became %v, want %v", got, defaults)
 	}
 }
+
+// Appearance values out of range fall back, and a background picture can
+// only name a file of the appearance folder.
+func TestNormalizeAppearance(t *testing.T) {
+	a := AppearanceSettings{Style: "neon", Accent: "red", Background: `..\..\secret.png`, Opacity: 5, Dim: 120, Blur: -3, Cards: 10}
+	normalizeAppearance(&a)
+	want := AppearanceSettings{Style: "default", Accent: "#3b82f6", Background: "", Opacity: 10, Dim: 90, Blur: 0, Cards: 40}
+	if a != want {
+		t.Errorf("got %+v, want %+v", a, want)
+	}
+	a = AppearanceSettings{Style: "mint", Accent: "#8B5CF6", Background: "bg-1.jpg", Dim: 0, Blur: 12, Cards: 0}
+	normalizeAppearance(&a)
+	want = AppearanceSettings{Style: "mint", Accent: "#8b5cf6", Background: "bg-1.jpg", Opacity: 100, Dim: 0, Blur: 12, Cards: 85}
+	if a != want {
+		t.Errorf("got %+v, want %+v", a, want)
+	}
+}

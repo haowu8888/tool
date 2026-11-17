@@ -77,6 +77,32 @@ export interface AppSettings {
   update: UpdateSettings;
   /** Launcher is the quick launcher's. */
   launcher: LauncherSettings;
+  /** Appearance is the style, accent color and background picture. */
+  appearance: AppearanceSettings;
+}
+
+/** AppearanceSettings are how the windows look, beyond light and dark. */
+export interface AppearanceSettings {
+  /**
+   * Style gives the colors of the background, cards and lines: default,
+   * warm, cool, mint or pure.
+   */
+  style: string;
+  /** #rrggbb */
+  accent: string;
+  /**
+   * Background is the main window's picture, a file name of the
+   * appearance folder; empty for none.
+   */
+  background: string;
+  /** percent opacity of the picture */
+  opacity: number;
+  /** percent of the background color over the picture */
+  dim: number;
+  /** px the picture is blurred */
+  blur: number;
+  /** percent opacity of the cards over the picture */
+  cards: number;
 }
 
 /** BatterySample is the battery's charge and health. */
@@ -1210,6 +1236,10 @@ export const Settings = {
   about(): Promise<AboutInfo> {
     return call("Settings.About");
   },
+  /** ClearBackground takes the main window's background picture away. */
+  clearBackground(): Promise<void> {
+    return call("Settings.ClearBackground");
+  },
   /** Get returns the settings. */
   get(): Promise<AppSettings> {
     return call("Settings.Get");
@@ -1225,11 +1255,21 @@ export const Settings = {
   pauseShortcuts(pause: boolean): Promise<void> {
     return call("Settings.PauseShortcuts", pause);
   },
+  /**
+   * PickBackground asks for a picture and makes it the main window's
+   * background. It returns false when the user cancels.
+   */
+  pickBackground(): Promise<boolean> {
+    return call("Settings.PickBackground");
+  },
   /** ResetWidget puts the floating ball back in its first place. */
   resetWidget(): Promise<void> {
     return call("Settings.ResetWidget");
   },
-  /** Save replaces the settings, but for the floating ball's position. */
+  /**
+   * Save replaces the settings, but for the floating ball's position and the
+   * background picture, which PickBackground and ClearBackground change.
+   */
   save(s: AppSettings): Promise<void> {
     return call("Settings.Save", s);
   },

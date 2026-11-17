@@ -68,6 +68,7 @@ func main() {
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()
+	serveAppearance()
 	// Screenshots and pinned pictures, which their windows load by URL.
 	shot.serve()
 	// The clipboard history's pictures.
@@ -75,6 +76,7 @@ func main() {
 
 	// Start in the saved appearance, without a flash of the other.
 	prefs := settings.Get()
+	cleanBackgrounds(prefs.Appearance.Background)
 	applyTheme(prefs.Theme)
 
 	// The displays the virtual display replaced come back however the app

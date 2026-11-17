@@ -1,5 +1,6 @@
 // The settings: kept by Go in settings.json, shown in the 设置 panel.
 import { chime, esc, onLeave } from "./ui";
+import { accents, applyAppearance, backgroundURL, defaultAccent, isDark, styles } from "./appearance";
 import { AI, Overlay, Settings, Updates, events, type AISettings, type AppSettings, type ShortcutSetting, type ShortcutStatus, type UpdateState } from "./mygo";
 
 // ToolInfo is what the settings know of a tool of the sidebar.
@@ -46,6 +47,7 @@ function setSettings(s: AppSettings) {
   // follow it without waiting for that.
   if (s.theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = s.theme;
+  applyAppearance(s.appearance);
   for (const fn of [...listeners]) fn(s);
 }
 
@@ -217,6 +219,20 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
             <button data-value="dark">☾ 夜晚</button>
           </div>
         </div>
+        <div class="s-row s-look-row"><span>风格<small class="muted">背景、卡片和线条的配色，白天夜晚各一套</small></span><div class="s-styles"></div></div>
+        <div class="s-row s-look-row">
+          <span>强调色<small class="muted">按钮、选中项和链接的颜色</small></span>
+          <div class="s-accents">${accents.map(([c, name]) => `<button type="button" data-accent="${c}" title="${name}" style="--sw:${c}"></button>`).join("")}<label class="s-accent-custom" title="自定义颜色"><input type="color" id="s-accent" /></label></div>
+        </div>
+        <div class="s-row s-look-row">
+          <span>背景图片<small class="muted">只用在工具箱主窗口，图片会复制到数据文件夹</small></span>
+          <span class="s-key-edit"><span class="s-bg-thumb" hidden></span><button type="button" id="s-bg-pick">选择图片</button><button type="button" id="s-bg-clear" hidden>移除</button></span>
+        </div>
+        <div class="s-row s-sub s-bg-row"><span>图片不透明度<small class="muted">越低图片越淡，透出底下的背景色</small></span><span class="s-range"><input type="range" id="s-bg-opacity" min="10" max="100" step="5" /><output></output></span></div>
+        <div class="s-row s-sub s-bg-row"><span>遮罩浓度<small class="muted">图片上盖一层背景色，越浓文字越清楚</small></span><span class="s-range"><input type="range" id="s-bg-dim" min="0" max="90" step="5" /><output></output></span></div>
+        <div class="s-row s-sub s-bg-row"><span>模糊</span><span class="s-range"><input type="range" id="s-bg-blur" min="0" max="30" step="1" /><output></output></span></div>
+        <div class="s-row s-sub s-bg-row"><span>卡片不透明度</span><span class="s-range"><input type="range" id="s-bg-cards" min="40" max="100" step="5" /><output></output></span></div>
+        <div class="s-row"><span>恢复默认外观<small class="muted">风格、强调色和背景图片回到默认，主题不变</small></span><button type="button" id="s-look-reset">恢复</button></div>
       </div>
     </section>
     <section class="s-group">
@@ -319,6 +335,44 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
     });
   }
   const $ = <T extends HTMLElement>(sel: string) => panel.querySelector<T>(sel)!;
+  const stylesBox = $(".s-styles");
+  stylesBox.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
+    if (b) void save((s) => (s.appearance.style = b.dataset.style!));
+  });
+  $(".s-accents").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
+    if (b) void save((s) => (s.appearance.accent = b.dataset.accent!));
+  });
+  const accent = $<HTMLInputElement>("#s-accent");
+  accent.addEventListener("change", () => void save((s) => (s.appearance.accent = accent.value)));
+  $("#s-bg-pick").addEventListener("click", () => void Settings.pickBackground().catch((e) => alert(e)));
+  $("#s-bg-clear").addEventListener("click", () => void Settings.clearBackground().catch((e) => alert(e)));
+  const bgOpacity = $<HTMLInputElement>("#s-bg-opacity");
+  const bgDim = $<HTMLInputElement>("#s-bg-dim");
+  const bgBlur = $<HTMLInputElement>("#s-bg-blur");
+  const bgCards = $<HTMLInputElement>("#s-bg-cards");
+  const showBgRange = () => {
+    bgOpacity.nextElementSibling!.textContent = `${bgOpacity.value}%`;
+    bgDim.nextElementSibling!.textContent = `${bgDim.value}%`;
+    bgBlur.nextElementSibling!.textContent = `${bgBlur.value}px`;
+    bgCards.nextElementSibling!.textContent = `${bgCards.value}%`;
+  };
+  // Sliding shows the change at once; letting go saves it.
+  for (const r of [bgOpacity, bgDim, bgBlur, bgCards]) {
+    r.addEventListener("input", () => {
+      showBgRange();
+      applyAppearance({ ...settings.appearance, opacity: +bgOpacity.value, dim: +bgDim.value, blur: +bgBlur.value, cards: +bgCards.value });
+    });
+  }
+  bgOpacity.addEventListener("change", () => void save((s) => (s.appearance.opacity = +bgOpacity.value)));
+  bgDim.addEventListener("change", () => void save((s) => (s.appearance.dim = +bgDim.value)));
+  bgBlur.addEventListener("change", () => void save((s) => (s.appearance.blur = +bgBlur.value)));
+  bgCards.addEventListener("change", () => void save((s) => (s.appearance.cards = +bgCards.value)));
+  $("#s-look-reset").addEventListener("click", () => {
+    if (settings.appearance.background) void Settings.clearBackground().catch((e) => alert(e));
+    void save((s) => Object.assign(s.appearance, { style: "default", accent: defaultAccent, opacity: 100, dim: 40, blur: 0, cards: 85 }));
+  });
   const home = $<HTMLSelectElement>("#s-home");
   home.addEventListener("change", () => void save((s) => (s.homeTool = home.value)));
   const login = $<HTMLInputElement>("#s-login");
@@ -408,6 +462,29 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
       order.map((t) => `<option value="${t.id}">${t.name}</option>`).join("") +
       `<option value="settings">设置</option>`;
     home.value = s.homeTool;
+    const a = s.appearance;
+    stylesBox.innerHTML = styles
+      .map((st) => {
+        const p = isDark() ? st.dark : st.light;
+        return `<button type="button" data-style="${st.id}" class="${st.id === a.style ? "on" : ""}" style="--p-bg:${p.bg};--p-card:${p.card};--p-line:${p.line};--p-fg:${p.fg}"><span class="s-style-sw"><i></i></span>${st.name}</button>`;
+      })
+      .join("");
+    const preset = accents.some(([c]) => c === a.accent);
+    for (const b of panel.querySelectorAll<HTMLButtonElement>(".s-accents button")) b.classList.toggle("on", b.dataset.accent === a.accent);
+    accent.value = a.accent;
+    accent.parentElement!.classList.toggle("on", !preset);
+    accent.parentElement!.style.setProperty("--sw", preset ? "" : a.accent);
+    const thumb = $(".s-bg-thumb");
+    thumb.hidden = !a.background;
+    thumb.style.backgroundImage = a.background ? `url("${backgroundURL(a.background)}")` : "";
+    $("#s-bg-clear").hidden = !a.background;
+    $("#s-bg-pick").textContent = a.background ? "换一张" : "选择图片";
+    for (const el of panel.querySelectorAll<HTMLElement>(".s-bg-row")) el.hidden = !a.background;
+    bgOpacity.value = String(a.opacity);
+    bgDim.value = String(a.dim);
+    bgBlur.value = String(a.blur);
+    bgCards.value = String(a.cards);
+    showBgRange();
     login.checked = s.openAtLogin;
     hidden.checked = s.startHidden;
     hidden.disabled = !s.openAtLogin;
@@ -429,7 +506,7 @@ export function renderSettings(panel: HTMLElement, tools: ToolInfo[]) {
     size.value = String(s.widget.size);
     opacity.value = String(Math.round(s.widget.opacity * 100));
     showRange();
-    for (const el of panel.querySelectorAll<HTMLElement>(".s-sub:not(.s-mon .s-sub)")) {
+    for (const el of panel.querySelectorAll<HTMLElement>(".s-sub:not(.s-mon .s-sub):not(.s-bg-row)")) {
       const on = el.querySelector("#s-hidden") ? s.openAtLogin : s.widget.show && (!el.querySelector("#s-tuck") || s.widget.snap);
       el.classList.toggle("off", !on);
     }
