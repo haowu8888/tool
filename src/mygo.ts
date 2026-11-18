@@ -298,6 +298,31 @@ export interface DisplayInfo {
   height: number;
 }
 
+/** DocOptions is how 合并文档 lays out its pages. */
+export interface DocOptions {
+  /** pdf or pptx */
+  kind: string;
+  /**
+   * Page is the pages' size: fit (each the picture's; a PowerPoint's all
+   * of the first's shape), a4, a4l (landscape) or wide (16:9).
+   */
+  page: string;
+  /** 0 none, 1 small, 2 large */
+  margin: number;
+  /** the file's name, without extension */
+  name: string;
+}
+
+/** EditImage is a picture opened in the editor. */
+export interface EditImage {
+  url: string;
+  /** the file's name, or a made-up one */
+  name: string;
+  /** the file, which 覆盖原图 writes over; "" for none */
+  path: string;
+  size: number;
+}
+
 /** FlowAlert is a run that failed, until the user looks at it. */
 export interface FlowAlert {
   runId: string;
@@ -1703,6 +1728,10 @@ export const Clips = {
   delete(id: string): Promise<void> {
     return call("Clips.Delete", id);
   },
+  /** Edit opens a copied picture in the image editor. */
+  edit(id: string): Promise<void> {
+    return call("Clips.Edit", id);
+  },
   /** Hide hides the popup. */
   hide(): Promise<void> {
     return call("Clips.Hide");
@@ -2035,6 +2064,81 @@ export const Updates = {
   },
 } as const;
 
+/**
+ * ImageEdit opens pictures for the image editor's page and saves what it
+ * makes of them.
+ */
+export const ImageEdit = {
+  /** Copy puts the edited picture, a PNG in base64, on the clipboard. */
+  copy(data: string): Promise<void> {
+    return call("ImageEdit.Copy", data);
+  },
+  /** DocAdd adds the next page's picture, base64, in a format: jpeg or png. */
+  docAdd(job: string, data: string, format: string): Promise<void> {
+    return call("ImageEdit.DocAdd", job, data, format);
+  },
+  /**
+   * DocBegin asks where to write a document; it returns the job the pages go
+   * to, or "" when canceled.
+   */
+  docBegin(opts: DocOptions): Promise<string> {
+    return call("ImageEdit.DocBegin", opts);
+  },
+  /** DocCancel drops a job. */
+  docCancel(job: string): Promise<void> {
+    return call("ImageEdit.DocCancel", job);
+  },
+  /** DocFinish writes a job's file and returns it. */
+  docFinish(job: string): Promise<string> {
+    return call("ImageEdit.DocFinish", job);
+  },
+  /** Open asks for a picture to edit; nil when none is picked. */
+  open(): Promise<EditImage | null> {
+    return call("ImageEdit.Open");
+  },
+  /** OpenPath opens a picture file, as dropped on the window. */
+  openPath(path: string): Promise<EditImage> {
+    return call("ImageEdit.OpenPath", path);
+  },
+  /**
+   * Overwrite writes the edited picture over the file it was opened from,
+   * which must have been opened here and have the format's extension.
+   */
+  overwrite(path: string, data: string, format: string): Promise<void> {
+    return call("ImageEdit.Overwrite", path, data, format);
+  },
+  /** Pick asks for pictures, one or many, for 创造拼图 and 合并文档. */
+  pick(multiple: boolean): Promise<EditImage[]> {
+    return call("ImageEdit.Pick", multiple);
+  },
+  /** Reveal shows a saved picture in Explorer. */
+  reveal(path: string): Promise<void> {
+    return call("ImageEdit.Reveal", path);
+  },
+  /**
+   * Save asks where to save the edited picture, base64 in a format, and
+   * returns the file, or "" when the user cancels. The dialog starts beside
+   * the opened file, or where the last was saved.
+   */
+  save(data: string, format: string, name: string, from: string): Promise<string> {
+    return call("ImageEdit.Save", data, format, name, from);
+  },
+  /**
+   * SaveFile asks where to save a picture the page made, as a collage or a
+   * long picture, base64 in a format, under a name without extension.
+   */
+  saveFile(data: string, format: string, name: string): Promise<string> {
+    return call("ImageEdit.SaveFile", data, format, name);
+  },
+  /**
+   * Take returns the picture sent to the editor that the page has not
+   * opened, once.
+   */
+  take(): Promise<EditImage | null> {
+    return call("ImageEdit.Take");
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
@@ -2059,6 +2163,11 @@ export const events = {
   flowChanged: event<FlowState>("flowChanged"),
   /** FlowFocus asks the tool's page to show a run, as the bubble's 看日志. */
   flowFocus: event<string>("flowFocus"),
+  /**
+   * ImageEditOpened tells the image editor's page that a picture waits for
+   * it, as a screenshot sent to 编辑: the page takes it with Take.
+   */
+  imageEditOpened: event<number>("imageEditOpened"),
   /**
    * LauncherChanged is sent with the new data whenever the apps or the
    * categories change.

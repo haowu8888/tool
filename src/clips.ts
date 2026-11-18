@@ -138,7 +138,7 @@ export const clipsTool = {
           <div class="cl-item cl-k-${c.kind}${c.pinned ? " pinned" : ""}" data-id="${c.id}" title="点击复制">
             <div class="cl-body">${clipBody(c, false)}</div>
             <div class="cl-foot"><span class="muted">${c.pinned ? "📌 " : ""}${clipMeta(c)}</span>
-              <span class="cl-acts"><button data-act="pin">${c.pinned ? "取消置顶" : "置顶"}</button><button data-act="del">删除</button></span></div>
+              <span class="cl-acts">${c.kind === "image" ? `<button data-act="edit">编辑</button>` : ""}<button data-act="pin">${c.pinned ? "取消置顶" : "置顶"}</button><button data-act="del">删除</button></span></div>
           </div>`,
             )
             .join("")
@@ -152,6 +152,7 @@ export const clipsTool = {
       const c = items.find((c) => c.id === id);
       if (act === "pin") void Clips.pin(id, !c?.pinned).catch(showError);
       else if (act === "del") void Clips.delete(id).catch(showError);
+      else if (act === "edit") void Clips.edit(id).catch(showError);
       else void Clips.copy(id).then(() => toast("已复制"), showError);
     });
     search.addEventListener("input", render);

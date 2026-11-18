@@ -10,6 +10,7 @@ import { flowTool } from "./flow";
 import { devTool } from "./devtools";
 import { boardTool } from "./board";
 import { recordTool } from "./record";
+import { imageTool } from "./imageedit";
 import { focusAdd, notesTool } from "./notes";
 import { shotTool } from "./shot";
 import { isHidden, kbd, onSettings, orderTools, renderSettings, settings, shortcutKeys } from "./settings";
@@ -31,6 +32,7 @@ const tools: Tool[] = [
   boardTool,
   shotTool,
   recordTool,
+  imageTool,
   clipsTool,
   monitorTool,
   servicesTool,

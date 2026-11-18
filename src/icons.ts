@@ -34,3 +34,25 @@ export const markIcons = {
   record: svg(`<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>`),
   long: svg(`<rect x="6" y="2.5" width="12" height="19" rx="1.5"/><path d="M9 9l3 3 3-3M9 14l3 3 3-3"/>`),
 };
+
+// The image editor's, on the same grid.
+export const editIcons = {
+  crop: svg(`<path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h4M18 22v-4M10 6h6a2 2 0 0 1 2 2v6"/>`),
+  adjust: svg(`<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/>`),
+  resize: svg(`<rect x="3" y="11" width="10" height="10" rx="1.5"/><path d="M13 3h8v8M21 3l-8 8"/>`),
+  mark: markIcons.pen,
+  frame: svg(`<rect x="2.5" y="2.5" width="19" height="19" rx="4"/><rect x="7" y="7" width="10" height="10" rx="1.5"/>`),
+  pick: svg(`<path d="m14.5 5.5 4 4M4 20l1.5-4.5 9-9 3 3-9 9z"/><path d="m13 4 2.5-2.5a2.1 2.1 0 0 1 3 0l4 4a2.1 2.1 0 0 1 0 3L20 11"/>`),
+  redo: svg(`<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>`),
+  rotateLeft: svg(`<path d="M3 4v5h5"/><path d="M3.5 9A8.5 8.5 0 1 1 6 18"/>`),
+  rotateRight: svg(`<path d="M21 4v5h-5"/><path d="M20.5 9A8.5 8.5 0 1 0 18 18"/>`),
+  flipH: svg(`<path d="M12 3v18M9 7 3 17h6zM15 7l6 10h-6z"/>`),
+  flipV: svg(`<path d="M3 12h18M7 9 17 3v6zM7 15l10 6v-6z"/>`),
+  move: svg(`<path d="m5 3 14 7-6 1.8L10.5 18z"/><path d="m13 12 6 6"/>`),
+  splitX: svg(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>`),
+  splitY: svg(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/>`),
+  join: svg(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v4M12 16v4M9 12h6"/>`),
+  eye: svg(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
+  eyeOff: svg(`<path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2"/>`),
+  grid: svg(`<rect x="3" y="3" width="7.5" height="7.5" rx="1"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1"/>`),
+};

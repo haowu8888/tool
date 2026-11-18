@@ -148,6 +148,8 @@ type Shot struct {
 	main     *mygo.Window
 	// onQR is told what the QR codes of a selection say, in mode qr.
 	onQR func(DevQRResult)
+	// onEdit opens a selection, or a pinned picture, in the image editor.
+	onEdit func(png []byte, name string)
 }
 
 type shotFrame struct {
@@ -424,6 +426,13 @@ func (s *Shot) use(img *image.RGBA, d mygo.Display, rect image.Rectangle, action
 		return nil
 	case "save":
 		return s.save(img)
+	case "edit":
+		b, err := encodePNG(img)
+		if err != nil || s.onEdit == nil {
+			return err
+		}
+		s.onEdit(b, "截图 "+time.Now().Format("2006-01-02 150405"))
+		return nil
 	case "pin", "ocr", "translate":
 		scale := d.ScaleFactor
 		if scale <= 0 {
@@ -666,6 +675,11 @@ func (s *Shot) PinMenu(id string) {
 		mygo.Separator(),
 		{Label: "复制图片", Click: func(*mygo.MenuItem, *mygo.Window) { go s.CopyPin(id) }},
 		{Label: "另存为…", Click: func(*mygo.MenuItem, *mygo.Window) { go s.SavePin(id) }},
+		{Label: "在图片编辑里打开", Click: func(*mygo.MenuItem, *mygo.Window) {
+			if s.onEdit != nil {
+				go s.onEdit(p.png, "贴图 "+time.Now().Format("2006-01-02 150405"))
+			}
+		}},
 		mygo.Separator(),
 		{Label: "关闭", Click: func(*mygo.MenuItem, *mygo.Window) { go s.ClosePin(id) }},
 		{Label: "关闭全部贴图", Click: func(*mygo.MenuItem, *mygo.Window) { go s.CloseAllPins() }},

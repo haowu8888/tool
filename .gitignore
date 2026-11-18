@@ -10,3 +10,4 @@ mygo_windows_*.syso
 /.dev/*.exe
 /.dev/*.jpg
 /.dev/rec-out/
+/.dev/doc-out/

@@ -50,6 +50,7 @@ func main() {
 	dev := &Dev{shot: shot}
 	board := &Board{}
 	updates := &Updates{settings: settings}
+	imageEdit := &ImageEdit{settings: settings}
 	mygo.Bind(virtual)
 	mygo.Bind(launcher)
 	mygo.Bind(notes)
@@ -68,6 +69,7 @@ func main() {
 	mygo.Bind(dev)
 	mygo.Bind(board)
 	mygo.Bind(updates)
+	mygo.Bind(imageEdit)
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()
@@ -76,6 +78,8 @@ func main() {
 	shot.serve()
 	// The clipboard history's pictures.
 	clips.serve()
+	// The pictures the image editor opens.
+	imageEdit.serve()
 
 	// Start in the saved appearance, without a flash of the other.
 	prefs := settings.Get()
@@ -252,6 +256,11 @@ func main() {
 		// A QR code cut out of the screen shows in the dev tools.
 		dev.open = func() { showTool("dev") }
 		shot.onQR = dev.found
+		// Screenshots, pinned pictures and copied ones open in the image
+		// editor from their 编辑.
+		imageEdit.open = func() { showTool("image") }
+		shot.onEdit = imageEdit.edit
+		clips.onEdit = imageEdit.edit
 		widget.onMove = func() { reminder.place() }
 		petChat.openSettings = func() { showTool("settings") }
 		petChat.onMove = func() { reminder.place() }

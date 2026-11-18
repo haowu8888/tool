@@ -120,6 +120,8 @@ type Clips struct {
 	// own is the clipboard's count after the app itself last put an item
 	// of the history on it: no copy of the user's in another app.
 	own uint32
+	// onEdit opens a copied picture in the image editor.
+	onEdit func(png []byte, name string)
 }
 
 func (c *Clips) load() {
@@ -446,6 +448,30 @@ func (c *Clips) write(e clipEntry) error {
 		return mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, b))))
 	}
 	return mygo.Clipboard.Write(transfer.TextData(strings.ReplaceAll(e.Full, "\n", "\r\n")))
+}
+
+// Edit opens a copied picture in the image editor.
+func (c *Clips) Edit(id string) error {
+	e, ok := c.find(id)
+	if !ok || e.Kind != "image" {
+		return errors.New("这条已经删掉了")
+	}
+	dir, err := clipDir()
+	if err != nil {
+		return err
+	}
+	b, err := os.ReadFile(filepath.Join(dir, e.ID+".png"))
+	if err != nil {
+		return errors.New("图片文件不见了")
+	}
+	if c.onEdit != nil {
+		name := "剪贴板图片"
+		if e.Source != "" {
+			name += " " + e.Source
+		}
+		go c.onEdit(b, name+" "+time.UnixMilli(e.Time).Format("2006-01-02 150405"))
+	}
+	return nil
 }
 
 // Paste puts an item on the clipboard and pastes it into the window the
