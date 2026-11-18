@@ -657,7 +657,7 @@ function renderQR(box: HTMLElement, off: (fn: () => void) => void) {
     <div class="dv-two">
       <div class="dv-col">
         <div class="dv-bar"><b>生成</b><span class="l-spacer"></span><button data-do="paste">用剪贴板</button><select class="dv-size"><option value="256">256</option><option value="384" selected>384</option><option value="512">512</option><option value="768">768</option></select></div>
-        <textarea class="dv-text dv-in dv-short" spellcheck="false" placeholder="网址或文字，如 http://cloudreve.haowu.fun/s/qLux"></textarea>
+        <textarea class="dv-text dv-in dv-short" spellcheck="false" placeholder="网址或文字，如 https://cloudreve.haowu.fun/s/qLux"></textarea>
         <div class="dv-qr"><span class="muted">输入内容后在这里生成</span></div>
         <div class="dv-acts dv-qr-acts" hidden><button data-do="copy-img">复制图片</button><button data-do="save-img">保存…</button></div>
       </div>

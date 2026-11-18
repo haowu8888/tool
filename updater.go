@@ -30,7 +30,7 @@ import (
 // portable zip to this share of Cloudreve, replacing the last ones; their
 // names carry the version (0.1.<run>, see deploy/flow.yaml).
 var (
-	updateServer = "http://cloudreve.haowu.fun"
+	updateServer = "https://cloudreve.haowu.fun"
 	updateShare  = "qLux"
 
 	setupName    = regexp.MustCompile(`(?i)^toolbox-setup-(\d+(?:\.\d+)*)-amd64\.exe$`)
@@ -40,8 +40,9 @@ var (
 // updateKey is the public half of the key the Flow pipeline signs every
 // build with (deploy/sign, the pipeline's secret TOOLBOX_SIGN_KEY; the
 // private half is kept also in %USERPROFILE%\.toolbox-signing). The share
-// is plain http: a download whose signature does not check out, as one
-// changed on the way, is never run.
+// is https since 2026-11-18 (http answers 301, which turns the API's POSTs
+// into GETs); the signature still guards the download: one that does not
+// check out, as one changed on the way or on the drive, is never run.
 var updateKey = ed25519.PublicKey(mustBase64("0abdZ1GupxZErg4kRUswyqL9B9Z3U4K24Q++Iv3zIW4="))
 
 func mustBase64(s string) []byte {
