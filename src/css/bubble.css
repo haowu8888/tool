@@ -1,0 +1,136 @@
+/* 提醒气泡窗口（/?bubble） */
+
+/* 待办提醒气泡（透明窗口，只有卡片） */
+html.bubble,
+html.bubble body {
+  height: auto;
+  background: transparent;
+  overflow: hidden;
+}
+
+html.bubble #app {
+  display: block;
+}
+
+.b-card {
+  margin: 8px;
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in srgb, #ef4444 45%, var(--line));
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.28);
+  font-size: 13.5px;
+}
+
+.b-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ef4444;
+}
+
+.b-bell {
+  display: inline-block;
+  animation: b-bell 1.6s ease-in-out infinite;
+}
+
+@keyframes b-bell {
+  0%,
+  50%,
+  100% {
+    rotate: 0deg;
+  }
+  60% {
+    rotate: -18deg;
+  }
+  70% {
+    rotate: 15deg;
+  }
+  80% {
+    rotate: -8deg;
+  }
+}
+
+.b-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 12px;
+}
+
+.b-x {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.b-x:hover {
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+}
+
+.b-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.b-text {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.b-meta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.b-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.b-actions button,
+.b-open {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.b-actions button:hover,
+.b-open:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.b-actions .b-done {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: #fff;
+}
+
+.b-actions .b-done:hover {
+  color: #fff;
+  filter: brightness(1.08);
+}
+
+.b-open {
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 8px;
+}

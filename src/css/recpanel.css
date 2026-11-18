@@ -1,0 +1,154 @@
+/* 录屏面板窗口（/?rec） */
+
+/* 录制中的红点，和工具页的同一套（style.css 里也有一份） */
+.rc-dot,
+.rp-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: rc-blink 1.2s ease-in-out infinite;
+}
+
+.rc-live.paused .rc-dot,
+.rp-dot.paused {
+  background: #f59e0b;
+  animation: none;
+}
+
+@keyframes rc-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+html.recpanel,
+html.recpanel body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+  font-size: 13px;
+}
+
+html.recpanel #app {
+  display: block;
+  box-sizing: border-box;
+  height: 100%;
+  border: 1px solid var(--line);
+}
+
+.rp-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 8px 0 14px;
+  box-sizing: border-box;
+  cursor: move;
+}
+
+.rp-time {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rp-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rp-bar button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rp-bar button:hover {
+  border-color: var(--accent);
+}
+
+.rp-bar button.sure {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.rp-stop i {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: #ef4444;
+}
+
+.rp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  cursor: move;
+}
+
+.rp-title {
+  font-size: 14px;
+}
+
+.rp-title .muted {
+  margin-left: 6px;
+  font-weight: normal;
+  font-size: 12px;
+}
+
+.rp-note {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.rp-note.warn {
+  color: #d97706;
+}
+
+.rp-acts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.rp-card .rp-acts:has(> :only-child) {
+  grid-template-columns: 1fr;
+}
+
+.rp-acts button {
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rp-acts button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}

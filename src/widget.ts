@@ -17,6 +17,10 @@ const longPress = 500;
 // falls asleep.
 const sleepAfter = 300;
 
+// livelyFor is how long the looping animations play after a change or a
+// fidget, in milliseconds.
+const livelyFor = 4000;
+
 export function showWidget(app: HTMLElement) {
   document.documentElement.classList.add("widget");
   // The window's title follows the page's; scripts tell it from 工具箱.
@@ -61,7 +65,21 @@ export function showWidget(app: HTMLElement) {
   let asleep = false;
   const mood = () => {
     const m: Mood = dragging ? "drag" : ringing + down + failed.length ? "alert" : hover ? "happy" : asleep ? "sleep" : "idle";
+    const was = ball.dataset.mood;
     ball.dataset.mood = m;
+    // Looked at or carried, it moves all along; otherwise for a few
+    // seconds after a change, then rests.
+    if (m === "happy" || m === "drag") live(Infinity);
+    else if (m === "sleep") live(0);
+    else if (m !== was || ball.classList.contains("w-live")) live(livelyFor);
+  };
+  // live lets the looping animations play for a while: every frame of the
+  // transparent window costs, so most of the time they rest.
+  let rest = 0;
+  const live = (ms: number) => {
+    clearTimeout(rest);
+    ball.classList.toggle("w-live", ms > 0);
+    if (ms > 0 && ms !== Infinity) rest = window.setTimeout(() => ball.classList.remove("w-live"), ms);
   };
   // act plays a short animation once, as a jump when clicked.
   const act = (name: string) => {
@@ -72,10 +90,15 @@ export function showWidget(app: HTMLElement) {
   look.addEventListener("animationend", (e) => {
     if ((e.target as Element) === look) look.className = "w-look";
   });
-  // Now and then an idle pet hops or looks around by itself.
+  // Now and then an idle pet hops or looks around by itself, and moves a
+  // few seconds; a ringing ball sways again.
   const fidget = () => {
-    setTimeout(fidget, 8000 + Math.random() * 14000);
-    if (pet !== "ball" && ball.dataset.mood === "idle") act(Math.random() < 0.5 ? "hop" : "tilt");
+    setTimeout(fidget, 12000 + Math.random() * 18000);
+    const m = ball.dataset.mood;
+    if (m === "alert") live(livelyFor);
+    if (pet === "ball" || m !== "idle") return;
+    live(livelyFor);
+    act(Math.random() < 0.5 ? "hop" : "tilt");
   };
   setTimeout(fidget, 6000);
   // It sleeps while the keyboard and mouse are idle, and wakes soon after.

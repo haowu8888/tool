@@ -1,0 +1,107 @@
+/* 每个窗口都加载的：颜色变量、主题、页面底色和几样共用的按钮。主窗口的其余样式在 ../style.css，
+   各小窗口的在这个文件夹里；哪个窗口加载哪些见 src/main.ts */
+
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --bg: #f6f7f9;
+  --fg: #16181d;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --line: #e5e7eb;
+  --accent: #3b82f6;
+  --ok: #22c55e;
+}
+
+/* 主题：data-theme 是设置里选的白天 / 夜晚，没有时跟随系统 */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --fg: #e8eaed;
+  --muted: #9aa0a6;
+  --card: #1a1d23;
+  --line: #2a2e36;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0f1115;
+    --fg: #e8eaed;
+    --muted: #9aa0a6;
+    --card: #1a1d23;
+    --line: #2a2e36;
+  }
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+:root {
+  --card-solid: var(--card);
+}
+
+#app {
+  display: flex;
+  height: 100%;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+button.primary {
+  font: inherit;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+button.primary:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+button.primary:not(:disabled):active {
+  filter: brightness(0.95);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.l-spacer {
+  flex: 1;
+}
+
+.s-seg {
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.s-seg button.on {
+  background: var(--card);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+}
+
+.s-seg button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}

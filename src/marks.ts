@@ -45,7 +45,7 @@ export const textLine = 1.3;
 export const sizeOf = (t: Tool, i: number) => sizes[t][i] ?? sizes[t][1]!;
 
 // The color and size picked last, for the next screenshot.
-export const markPrefs = (): { color: string; size: number } => {
+const markPrefs = (): { color: string; size: number } => {
   try {
     const p = JSON.parse(localStorage.getItem("shot-mark") || "{}");
     return { color: colors.includes(p.color) ? p.color : colors[0]!, size: [0, 1, 2].includes(p.size) ? p.size : 1 };
@@ -53,6 +53,80 @@ export const markPrefs = (): { color: string; size: number } => {
     return { color: colors[0]!, size: 1 };
   }
 };
+
+// pen is what marks are drawn with, the same in the screenshots, the
+// image editor and the collages: a color, and a size as an index of
+// sizes.
+export const pen = markPrefs();
+
+// setPen changes the pen and keeps it for next time; a color of one's own
+// is kept for this time only.
+export function setPen(p: Partial<typeof pen>) {
+  Object.assign(pen, p);
+  try {
+    const kept = JSON.parse(localStorage.getItem("shot-mark") || "{}");
+    localStorage.setItem("shot-mark", JSON.stringify({ ...kept, size: pen.size, ...(colors.includes(pen.color) ? { color: pen.color } : {}) }));
+  } catch {}
+}
+
+// newMark starts a mark of a tool, but text, where the pointer went down,
+// with the pen; size is the tool's in the marks' units.
+export function newMark(tool: Exclude<Tool, "text">, p: Pt, size: number): Mark {
+  return tool === "pen" || tool === "mosaic" ? { kind: tool, pts: [p], color: pen.color, size } : { kind: tool, a: p, b: p, color: pen.color, size };
+}
+
+// dragMark follows the pointer with a mark being drawn: a stroke gets a
+// point once the pointer went step further; a shape's corner follows it,
+// with Shift a square, a circle, or an arrow at 45° steps.
+export function dragMark(m: Mark, p: Pt, shift: boolean, step: number) {
+  if ("pts" in m) {
+    const last = m.pts[m.pts.length - 1]!;
+    if (Math.hypot(p.x - last.x, p.y - last.y) >= step) m.pts.push({ x: p.x, y: p.y });
+  } else if ("a" in m) {
+    let b = { x: p.x, y: p.y };
+    if (shift && m.kind !== "arrow") {
+      const d = Math.max(Math.abs(p.x - m.a.x), Math.abs(p.y - m.a.y));
+      b = { x: m.a.x + Math.sign(p.x - m.a.x) * d, y: m.a.y + Math.sign(p.y - m.a.y) * d };
+    } else if (shift) {
+      const ang = Math.round(Math.atan2(p.y - m.a.y, p.x - m.a.x) / (Math.PI / 4)) * (Math.PI / 4);
+      const len = Math.hypot(p.x - m.a.x, p.y - m.a.y);
+      b = { x: m.a.x + len * Math.cos(ang), y: m.a.y + len * Math.sin(ang) };
+    }
+    m.b = b;
+  }
+}
+
+// slip is whether a shape is too small to be meant: under min on both
+// sides. Strokes and text always count.
+export const slip = (m: Mark, min: number) => "a" in m && Math.abs(m.b.x - m.a.x) < min && Math.abs(m.b.y - m.a.y) < min;
+
+// textBox is the box a text mark is typed in, over the picture, in a
+// parent: Esc or Ctrl+Enter ends it (done), Enter starts a new line, and
+// a click in it stays in it. It grows with its text (field-sizing).
+export function textBox(parent: HTMLElement, className: string, done: () => void, value = "") {
+  const el = document.createElement("textarea");
+  el.className = className;
+  el.spellcheck = false;
+  el.rows = 1;
+  el.value = value;
+  parent.append(el);
+  el.addEventListener("pointerdown", (e) => e.stopPropagation());
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" || (e.key === "Enter" && e.ctrlKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      done();
+    }
+  });
+  setTimeout(() => el.focus());
+  return el;
+}
+
+// styleTextBox puts a text box at a place of its parent, in a color and
+// a size in the parent's pixels.
+export function styleTextBox(el: HTMLTextAreaElement, x: number, y: number, color: string, size: number) {
+  Object.assign(el.style, { left: `${x}px`, top: `${y}px`, color, font: textFont(size), lineHeight: String(textLine) });
+}
 
 // paintMarks draws marks on a canvas whose pixel (0, 0) is the marks'
 // point (ox, oy) / k, only within clip. Mosaic goes under the rest: it

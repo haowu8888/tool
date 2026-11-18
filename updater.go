@@ -4,6 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +36,48 @@ var (
 	setupName    = regexp.MustCompile(`(?i)^toolbox-setup-(\d+(?:\.\d+)*)-amd64\.exe$`)
 	portableName = regexp.MustCompile(`(?i)^toolbox-(\d+(?:\.\d+)*)-portable\.zip$`)
 )
+
+// updateKey is the public half of the key the Flow pipeline signs every
+// build with (deploy/sign, the pipeline's secret TOOLBOX_SIGN_KEY; the
+// private half is kept also in %USERPROFILE%\.toolbox-signing). The share
+// is plain http: a download whose signature does not check out, as one
+// changed on the way, is never run.
+var updateKey = ed25519.PublicKey(mustBase64("0abdZ1GupxZErg4kRUswyqL9B9Z3U4K24Q++Iv3zIW4="))
+
+func mustBase64(s string) []byte {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// updateMessage is what is signed of a build: its name, which carries the
+// version, and its SHA-256.
+func updateMessage(name string, sum []byte) []byte {
+	return []byte("toolbox-update\n" + name + "\n" + hex.EncodeToString(sum) + "\n")
+}
+
+// verifyUpdate checks a downloaded build against its signature, base64.
+func verifyUpdate(file, name string, sig []byte) error {
+	s, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sig)))
+	if err != nil || len(s) != ed25519.SignatureSize {
+		return errors.New("签名文件不对")
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	if !ed25519.Verify(updateKey, updateMessage(name, h.Sum(nil)), s) {
+		return errors.New("签名对不上，文件可能在下载途中被改过，已停止更新")
+	}
+	return nil
+}
 
 // UpdateChanged is sent whenever a check or a download moves on.
 var UpdateChanged = mygo.NewEvent[UpdateState]("updateChanged")
@@ -62,6 +108,7 @@ type Updates struct {
 	mu    sync.Mutex
 	state UpdateState
 	path  string // the file's path in the share
+	sig   string // its signature's, "" for none
 }
 
 type shareFile struct {
@@ -110,7 +157,12 @@ func (u *Updates) Check() (UpdateState, error) {
 	} else {
 		s.Latest, s.File, s.Size, s.Published = v, f.Name, f.Size, f.UpdatedAt.UnixMilli()
 		s.Newer = s.Current != "" && compareVersions(v, s.Current) > 0
-		u.path = f.Path
+		u.path, u.sig = f.Path, ""
+		for _, g := range files {
+			if g.Type == 0 && g.Name == f.Name+".sig" {
+				u.sig = g.Path
+			}
+		}
 	}
 	out := *s
 	u.mu.Unlock()
@@ -134,12 +186,16 @@ func (u *Updates) Install() error {
 		u.mu.Unlock()
 		return errors.New("没有可以安装的新版本，先检查更新")
 	}
+	if u.sig == "" {
+		u.mu.Unlock()
+		return errors.New("网盘里的新版本没有签名，不能自动安装：请到网盘手动下载")
+	}
 	u.state.Installing, u.state.Done, u.state.Error = true, 0, ""
-	path := u.path
+	path, sig := u.path, u.sig
 	u.mu.Unlock()
 	u.tell()
 
-	err := u.install(path, s)
+	err := u.install(path, sig, s)
 	u.mu.Lock()
 	u.state.Installing = false
 	if err != nil {
@@ -150,7 +206,7 @@ func (u *Updates) Install() error {
 	return err
 }
 
-func (u *Updates) install(path string, s UpdateState) error {
+func (u *Updates) install(path, sigPath string, s UpdateState) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -160,14 +216,25 @@ func (u *Updates) install(path string, s UpdateState) error {
 	if err != nil {
 		return err
 	}
+	sig, err := downloadSmall(sigPath)
+	if err != nil {
+		os.RemoveAll(dir)
+		return fmt.Errorf("取签名：%w", err)
+	}
 	link, err := downloadURL(path)
 	if err != nil {
+		os.RemoveAll(dir)
 		return fmt.Errorf("取下载地址：%w", err)
 	}
 	file := filepath.Join(dir, s.File)
 	if err := u.download(link, file, s.Size); err != nil {
 		os.RemoveAll(dir)
 		return fmt.Errorf("下载：%w", err)
+	}
+	if err := verifyUpdate(file, s.File, sig); err != nil {
+		os.RemoveAll(dir)
+		log.Printf("update: %s: %v", s.File, err)
+		return err
 	}
 	src := ""
 	if s.Portable {
@@ -287,6 +354,23 @@ func downloadURL(path string) (string, error) {
 		return "", errors.New("网盘没有给出下载地址")
 	}
 	return data.URLs[0].URL, nil
+}
+
+// downloadSmall downloads a small file of the share, as a signature.
+func downloadSmall(path string) ([]byte, error) {
+	link, err := downloadURL(path)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := updateClient.Get(link)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("网盘返回 %s", resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 }
 
 // cloudreve calls the API of Cloudreve v4, anonymous: the share is public.

@@ -5,6 +5,7 @@
 import { onFileDrop } from "mygo-runtime";
 import { editIcons, icons } from "./icons";
 import { base64, canvas, decode, decodeBlob, encodeCanvas, formatTips, imagePath, pastedPicture, pickPictures, savedToast, stamp } from "./imgutil";
+import { longLayout } from "./geom";
 import { ImageEdit, type EditImage } from "./mygo";
 import { esc, onLeave, showError, toast } from "./ui";
 
@@ -177,25 +178,12 @@ async function exportAll() {
   }
 }
 
-// The longest picture a canvas holds.
-const maxLong = 32000;
-
 async function exportLong(name: string) {
   try {
     // The widest picture sets the width; the others are scaled to it.
     const dims = pages.map((p) => (p.rot === 90 || p.rot === 270 ? [p.h, p.w] : [p.w, p.h]) as [number, number]);
-    let width = Math.max(...dims.map(([w]) => w));
-    if (opts.max) width = Math.min(width, opts.max);
-    width = Math.min(width, 8000);
-    const gapOf = (w: number) => Math.round(w * [0, 0.02, 0.05][opts.margin]!);
-    const heightAt = (w: number) => dims.reduce((s, [pw, ph]) => s + Math.round((ph * (w - 2 * gapOf(w))) / pw), 0) + gapOf(w) * (pages.length + 1);
-    let height = heightAt(width);
-    if (height > maxLong) {
-      width = Math.floor((width * maxLong) / height);
-      height = heightAt(width);
-      toast(`太长了，宽度缩到 ${width} 像素`);
-    }
-    const gap = gapOf(width);
+    const { width, gap, heights, height, shrunk } = longLayout(dims, opts.max, opts.margin);
+    if (shrunk) toast(`太长了，宽度缩到 ${width} 像素`);
     const out = canvas(width, height);
     const ctx = out.getContext("2d")!;
     ctx.fillStyle = "#fff";
@@ -206,9 +194,8 @@ async function exportLong(name: string) {
       busy = `正在拼接 ${i + 1}/${pages.length}…`;
       draw();
       const c = await pictureOf(p);
-      const w = width - 2 * gap;
-      const h = Math.round((dims[i]![1] * w) / dims[i]![0]);
-      ctx.drawImage(c, gap, y, w, h);
+      const h = heights[i]!;
+      ctx.drawImage(c, gap, y, width - 2 * gap, h);
       c.width = c.height = 0;
       y += h + gap;
     }

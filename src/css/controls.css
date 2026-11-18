@@ -1,0 +1,92 @@
+/* 每个窗口最后加载：通用控件（复选框、焦点框、下拉框、滚动条、菜单淡入），排在各窗口自己的样式后面 */
+
+/* ---- 通用控件 ---- */
+
+/* 复选框、单选、滑块跟着强调色 */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+  accent-color: var(--accent);
+}
+
+/* 键盘操作时的焦点框（鼠标点击不出现） */
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* 下拉框：去掉系统箭头，换成同一个细箭头 */
+.l-dialog select,
+.s-row select,
+.pn-head select,
+.dv-bar select,
+.dv-opt select {
+  appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238b919c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 9px center;
+  background-size: 14px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.dv-bar select,
+.dv-opt select {
+  padding-right: 24px;
+  background-position: right 6px center;
+  background-size: 12px;
+}
+
+select option {
+  background: var(--card-solid);
+  color: var(--fg);
+}
+
+/* 滚动条：细、圆角，平时淡，悬停时深一点 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 40%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 70%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* 右键菜单类的弹出层淡入 */
+.l-menu {
+  animation: pop-in 0.12s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .l-dialog[open],
+  .l-dialog::backdrop,
+  .l-toast,
+  .l-menu {
+    animation: none;
+  }
+}

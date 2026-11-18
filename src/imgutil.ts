@@ -1,5 +1,6 @@
 // What the image tool's three views (编辑图片, 创造拼图, 合并文档) share:
 // canvases, loading pictures, backgrounds, and the save dialog.
+import { colors, pen, setPen, sizes, type Tool } from "./marks";
 import { ImageEdit, type EditImage } from "./mygo";
 import { openDialog, showError, toast } from "./ui";
 
@@ -290,3 +291,45 @@ export async function copyCanvas(c: HTMLCanvasElement) {
   toast("已复制图片");
 }
 
+
+// ---- The pen's panel, of 编辑图片's 标注 and of 创造拼图 ----
+
+export function penHTML() {
+  return `
+    <h3>粗细</h3>
+    <div class="ie-chips ie-sizes">${[0, 1, 2].map((i) => `<button data-size="${i}">${["细", "中", "粗"][i]}</button>`).join("")}</div>
+    <h3 class="ie-color-h">颜色</h3>
+    <div class="ie-colors">${colors.map((c) => `<button data-color="${c}" title="${c}"><i style="background:${c}"></i></button>`).join("")}<label class="ie-custom" title="自定义颜色"><input type="color" /></label></div>`;
+}
+
+// showPen marks the pen's size and color in its panel, for a tool.
+export function showPen(box: HTMLElement, tool: Tool) {
+  box.querySelectorAll<HTMLElement>("[data-size]").forEach((b) => {
+    const i = Number(b.dataset.size);
+    b.classList.toggle("on", i === pen.size);
+    b.title = tool === "text" ? `${sizes.text[i]} 号字` : "";
+  });
+  const noColor = tool === "mosaic";
+  box.querySelector<HTMLElement>(".ie-colors")!.hidden = noColor;
+  box.querySelector<HTMLElement>(".ie-color-h")!.hidden = noColor;
+  box.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === pen.color));
+  const custom = box.querySelector<HTMLInputElement>(".ie-custom input")!;
+  custom.parentElement!.classList.toggle("on", !colors.includes(pen.color));
+  if (!colors.includes(pen.color)) custom.value = pen.color;
+}
+
+// penEvent changes the pen on a click or input in its panel, and tells
+// whether it did.
+export function penEvent(e: Event) {
+  const t = e.target as HTMLElement;
+  if (e.type === "input") {
+    if (!(t instanceof HTMLInputElement) || t.type !== "color" || !t.closest(".ie-custom")) return false;
+    setPen({ color: t.value });
+    return true;
+  }
+  const b = t.closest<HTMLElement>("[data-size], [data-color]");
+  if (!b) return false;
+  if (b.dataset.size) setPen({ size: Number(b.dataset.size) });
+  else setPen({ color: b.dataset.color! });
+  return true;
+}

@@ -369,7 +369,7 @@ func lightPhysical(wait time.Duration) bool {
 	}
 	for _, topology := range []uintptr{sdcTopologyExtend, sdcTopologyInternal} {
 		r, _, _ := setDisplayConfig.Call(0, 0, 0, 0, sdcApply|topology)
-		log.Printf("no physical display shows: SetDisplayConfig(%#x) = %d", topology, int32(r))
+		log.Printf("no physical display shows: SetDisplayConfig(%#x) = %d (%v)", topology, int32(r), syscall.Errno(r))
 		if waitPhysical(3 * time.Second) {
 			return true
 		}
@@ -582,11 +582,11 @@ func saveDisplayConfig() error {
 			continue
 		}
 		if r != 0 {
-			return fmt.Errorf("QueryDisplayConfig: %d", r)
+			return fmt.Errorf("QueryDisplayConfig: %d (%v)", r, syscall.Errno(r))
 		}
 		r, _, _ = setDisplayConfig.Call(uintptr(nPaths), uintptr(unsafe.Pointer(&paths[0])), uintptr(nModes), uintptr(unsafe.Pointer(&modes[0])), sdcApply|sdcUseSuppliedDisplayConfig|sdcSaveToDatabase|sdcAllowChanges)
 		if r != 0 {
-			return fmt.Errorf("SetDisplayConfig: %d", r)
+			return fmt.Errorf("SetDisplayConfig: %d (%v)", r, syscall.Errno(r))
 		}
 		return nil
 	}
@@ -810,11 +810,34 @@ func changeDisplay(name string, m *devMode, flags uint32) error {
 	if name != "" {
 		dev, _ = syscall.UTF16PtrFromString(name)
 	}
-	r, _, err := changeDisplaySettingsEx.Call(uintptr(unsafe.Pointer(dev)), uintptr(unsafe.Pointer(m)), 0, uintptr(flags), 0)
+	r, _, _ := changeDisplaySettingsEx.Call(uintptr(unsafe.Pointer(dev)), uintptr(unsafe.Pointer(m)), 0, uintptr(flags), 0)
 	if rc := int32(r); rc != 0 { // DISP_CHANGE_SUCCESSFUL
-		return fmt.Errorf("ChangeDisplaySettingsEx %s: %d (%v)", name, rc, err)
+		// The result is the reason; GetLastError says nothing of it.
+		return fmt.Errorf("ChangeDisplaySettingsEx %s: %d (%s)", name, rc, dispChangeText(rc))
 	}
 	return nil
+}
+
+// dispChangeText tells what a DISP_CHANGE_* result of
+// ChangeDisplaySettingsEx means.
+func dispChangeText(rc int32) string {
+	switch rc {
+	case 1:
+		return "要重启电脑才生效"
+	case -1:
+		return "显卡驱动没能设置这个模式"
+	case -2:
+		return "不支持这个分辨率或刷新率"
+	case -3:
+		return "没能写进注册表"
+	case -4:
+		return "参数标志不对"
+	case -5:
+		return "参数不对"
+	case -6:
+		return "系统不支持 DualView"
+	}
+	return "未知结果"
 }
 
 // plugMonitor plugs a virtual monitor into the usbmmidd device, or out.

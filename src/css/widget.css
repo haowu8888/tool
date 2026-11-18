@@ -1,0 +1,110 @@
+/* 悬浮球窗口（/?widget） */
+
+/* 悬浮球（窗口透明，只有球） */
+html.widget,
+html.widget body {
+  background: transparent;
+  overflow: hidden;
+}
+
+html.widget #app {
+  display: grid;
+  place-items: center;
+}
+
+.w-ball {
+  position: relative;
+  width: calc(100vmin - 12px);
+  height: calc(100vmin - 12px);
+  border-radius: 50%;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+  transition: transform 0.15s;
+}
+
+.w-ball:hover {
+  transform: scale(1.06);
+}
+
+.w-ball:active {
+  transform: scale(0.96);
+}
+
+.w-ball img {
+  width: 100%;
+  height: 100%;
+  transform: scale(1.18);
+  /* The ball's circle: the badges may stick out of it. */
+  clip-path: circle(42.37%);
+  pointer-events: none;
+}
+
+.w-badge {
+  position: absolute;
+  bottom: 12%;
+  right: 12%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px white;
+}
+
+.w-added {
+  animation: w-added 0.6s;
+}
+
+@keyframes w-added {
+  40% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 4px var(--ok);
+  }
+}
+
+/* 悬浮球：待办响铃时的红色角标和摇摆 */
+.w-alert {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: grid;
+  place-items: center;
+  min-width: 38%;
+  height: 38%;
+  padding: 0 2px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font: 700 12px/1 system-ui, sans-serif;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.w-alert[hidden] {
+  display: none;
+}
+
+.w-ball.w-ring {
+  animation: w-ring 2.6s ease-in-out infinite;
+  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.75), 0 2px 6px rgb(0 0 0 / 0.35);
+}
+
+@keyframes w-ring {
+  0%,
+  60%,
+  100% {
+    rotate: 0deg;
+  }
+  66% {
+    rotate: -14deg;
+  }
+  72% {
+    rotate: 12deg;
+  }
+  78% {
+    rotate: -8deg;
+  }
+  84% {
+    rotate: 5deg;
+  }
+}

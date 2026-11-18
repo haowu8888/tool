@@ -4,7 +4,7 @@
 // text is recognized and translated.
 import { icons, markIcons } from "./icons";
 import { Shot, events, type OCRResult, type ScrollShotState, type ShotFrame, type ShotRect, type Translation } from "./mygo";
-import { colors, markPrefs, paintMarks, sizeOf, sizes, textFont, textLine, tools, type Mark, type Pt, type Rect, type Tool } from "./marks";
+import { colors, dragMark, newMark, paintMarks, pen, setPen, sizeOf, sizes, slip, styleTextBox, textBox, textLine, tools, type Mark, type Pt, type Rect, type Tool } from "./marks";
 import { kbd, onSettings, save, settings, shortcutKeys } from "./settings";
 import { errorText, esc, onLeave, showError } from "./ui";
 
@@ -139,7 +139,6 @@ export function showShot(app: HTMLElement, display: number) {
   let drag: { kind: "new" | "move" | "resize" | "mark"; h?: string; x: number; y: number; orig: Rect } | null = null;
   let tool: Tool | null = null;
   let marks: Mark[] = [];
-  let pref = markPrefs();
   let editing: { el: HTMLTextAreaElement; at: Pt; color: string; size: number } | null = null;
   let pixelated: HTMLCanvasElement | null = null;
 
@@ -220,23 +219,20 @@ export function showShot(app: HTMLElement, display: number) {
     const sz = sizes[tool];
     opts.querySelectorAll<HTMLElement>("[data-size]").forEach((b) => {
       const i = Number(b.dataset.size);
-      b.classList.toggle("on", i === pref.size);
+      b.classList.toggle("on", i === pen.size);
       const d = tool === "text" ? 6 + i * 4 : tool === "mosaic" ? 8 + i * 4 : 4 + i * 3;
       Object.assign(b.querySelector("i")!.style, { width: `${d}px`, height: `${d}px` });
       b.title = tool === "text" ? `${sz[i]} 号字` : ["细", "中", "粗"][i]!;
     });
     opts.querySelector<HTMLElement>(".sh-colors")!.hidden = tool === "mosaic";
     opts.querySelector<HTMLElement>(".sh-sep")!.hidden = tool === "mosaic";
-    opts.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === pref.color));
+    opts.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === pen.color));
     opts.style.left = `${left}px`;
     opts.style.top = `${below ? top + bh + 4 : top}px`;
   };
 
-  const setPref = (p: Partial<typeof pref>) => {
-    pref = { ...pref, ...p };
-    try {
-      localStorage.setItem("shot-mark", JSON.stringify(pref));
-    } catch {}
+  const setPref = (p: Partial<typeof pen>) => {
+    setPen(p);
     if (editing) {
       if (p.color) editing.color = p.color;
       if (tool === "text" && p.size !== undefined) editing.size = sizeOf("text", p.size);
@@ -250,27 +246,15 @@ export function showShot(app: HTMLElement, display: number) {
 
   const styleEditor = () => {
     if (!editing) return;
-    Object.assign(editing.el.style, {
-      left: `${editing.at.x}px`,
-      top: `${editing.at.y}px`,
-      color: editing.color,
-      font: textFont(editing.size),
-      lineHeight: String(textLine),
-      maxWidth: `${(sel ? sel.x + sel.w : innerWidth) - editing.at.x}px`,
-    });
+    styleTextBox(editing.el, editing.at.x, editing.at.y, editing.color, editing.size);
+    editing.el.style.maxWidth = `${(sel ? sel.x + sel.w : innerWidth) - editing.at.x}px`;
   };
 
   const openEditor = (at: Pt) => {
-    const el = document.createElement("textarea");
-    el.className = "sh-text";
-    el.spellcheck = false;
-    el.rows = 1;
-    app.appendChild(el);
-    editing = { el, at, color: pref.color, size: sizeOf("text", pref.size) };
+    const el = textBox(app, "sh-text", () => commitText());
+    editing = { el, at, color: pen.color, size: sizeOf("text", pen.size) };
     styleEditor();
-    el.addEventListener("pointerdown", (e) => e.stopPropagation());
     el.addEventListener("blur", () => commitText());
-    setTimeout(() => el.focus());
   };
 
   const commitText = () => {
@@ -425,11 +409,10 @@ export function showShot(app: HTMLElement, display: number) {
     else if (sel && done && tool && inside(p.x, p.y, sel)) {
       if (tool === "text") {
         e.preventDefault();
-        openEditor({ x: p.x, y: p.y - (sizeOf("text", pref.size) * textLine) / 2 });
+        openEditor({ x: p.x, y: p.y - (sizeOf("text", pen.size) * textLine) / 2 });
         return;
       }
-      const size = sizeOf(tool, pref.size);
-      marks.push(tool === "pen" || tool === "mosaic" ? { kind: tool, pts: [p], color: pref.color, size } : { kind: tool, a: p, b: p, color: pref.color, size });
+      marks.push(newMark(tool, p, sizeOf(tool, pen.size)));
       drag = { kind: "mark", ...p, orig: { ...sel } };
     } else if (sel && done && inside(p.x, p.y, sel)) drag = { kind: "move", ...p, orig: { ...sel } };
     else if (marks.length) return; // what was drawn is not thrown away by a stray click
@@ -449,23 +432,7 @@ export function showShot(app: HTMLElement, display: number) {
     const y = clamp(e.clientY, 0, innerHeight);
     const o = drag.orig;
     if (drag.kind === "mark") {
-      const m = marks[marks.length - 1]!;
-      if ("pts" in m) {
-        const last = m.pts[m.pts.length - 1]!;
-        if (Math.hypot(x - last.x, y - last.y) >= 1.5) m.pts.push({ x, y });
-      } else if ("a" in m) {
-        let b = { x, y };
-        // Shift keeps a square, a circle, or a line at 45° steps.
-        if (e.shiftKey && m.kind !== "arrow") {
-          const d = Math.max(Math.abs(x - m.a.x), Math.abs(y - m.a.y));
-          b = { x: m.a.x + Math.sign(x - m.a.x) * d, y: m.a.y + Math.sign(y - m.a.y) * d };
-        } else if (e.shiftKey) {
-          const ang = Math.round(Math.atan2(y - m.a.y, x - m.a.x) / (Math.PI / 4)) * (Math.PI / 4);
-          const len = Math.hypot(x - m.a.x, y - m.a.y);
-          b = { x: m.a.x + len * Math.cos(ang), y: m.a.y + len * Math.sin(ang) };
-        }
-        m.b = b;
-      }
+      dragMark(marks[marks.length - 1]!, { x, y }, e.shiftKey, 1.5);
       return paint();
     }
     if (drag.kind === "new") {
@@ -488,8 +455,7 @@ export function showShot(app: HTMLElement, display: number) {
     drag = null;
     if (kind === "mark") {
       // A shape too small to see was a slip.
-      const m = marks[marks.length - 1]!;
-      if ("a" in m && Math.abs(m.b.x - m.a.x) < 3 && Math.abs(m.b.y - m.a.y) < 3) marks.pop();
+      if (slip(marks[marks.length - 1]!, 3)) marks.pop();
       return render();
     }
     const recording = frame?.mode === "record";
@@ -515,14 +481,8 @@ export function showShot(app: HTMLElement, display: number) {
   addEventListener("keydown", (e) => {
     if (!frame) return;
     const k = e.key.toLowerCase();
-    if (editing) {
-      // Esc, or Ctrl+Enter, ends the text; Enter starts a new line.
-      if (e.key === "Escape" || (e.key === "Enter" && e.ctrlKey)) {
-        e.preventDefault();
-        commitText();
-      }
-      return;
-    }
+    // The text box takes its own keys (textBox).
+    if (editing) return;
     if (e.key === "Escape") return cancel();
     if (!sel || !done) return;
     if (frame.mode === "record") {

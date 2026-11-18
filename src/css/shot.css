@@ -1,0 +1,525 @@
+/* 截图的选区窗口（/?shot）、长截图的边框和面板（/?longframe、/?scroll）、贴图（/?pin） */
+
+/* 截图：盖住整块显示器的选区窗口 */
+html.shot,
+html.shot body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  user-select: none;
+}
+
+html.shot #app {
+  display: block;
+  position: fixed;
+  inset: 0;
+  cursor: crosshair;
+}
+
+.sh-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 选区外变暗：遮罩用 clip-path 挖掉选区（页面脚本设置） */
+.sh-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.sh-sel {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #3b82f6;
+  pointer-events: none;
+}
+
+.sh-sel.done {
+  cursor: move;
+  pointer-events: auto;
+}
+
+.sh-h {
+  display: none;
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -5px 0 0 -5px;
+  border: 1px solid #fff;
+  background: #3b82f6;
+}
+
+.sh-sel.done .sh-h {
+  display: block;
+}
+
+.sh-h[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+.sh-h[data-h="n"] { left: 50%; top: 0; cursor: ns-resize; }
+.sh-h[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+.sh-h[data-h="e"] { left: 100%; top: 50%; cursor: ew-resize; }
+.sh-h[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.sh-h[data-h="s"] { left: 50%; top: 100%; cursor: ns-resize; }
+.sh-h[data-h="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+.sh-h[data-h="w"] { left: 0; top: 50%; cursor: ew-resize; }
+
+.sh-size,
+.sh-tip {
+  position: absolute;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.7);
+  color: #fff;
+  font: 12px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.sh-tip {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.sh-bar {
+  display: flex;
+  position: absolute;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+  cursor: default;
+}
+
+.sh-bar button {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #16181d;
+  font: 13px system-ui, "Microsoft YaHei", sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sh-bar button:hover {
+  background: #eef2f7;
+}
+
+.sh-bar button.primary {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.sh-bar[hidden],
+.pn-panel[hidden] {
+  display: none;
+}
+
+.sh-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: #e5e7eb;
+}
+
+.sh-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sh-sel.done[data-tool]:not([data-tool=""]) {
+  cursor: crosshair;
+}
+
+.sh-sel.done[data-tool="text"] {
+  cursor: text;
+}
+
+.sh-bar .sh-tool {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+}
+
+.sh-bar .sh-tool svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sh-bar .sh-tool.on {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.sh-bar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sh-bar button:disabled:hover {
+  background: none;
+}
+
+/* 标注的粗细和颜色：工具栏下面一排 */
+.sh-opts {
+  display: flex;
+  position: absolute;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+  cursor: default;
+}
+
+.sh-opts[hidden],
+.sh-opts [hidden] {
+  display: none;
+}
+
+.sh-opts span {
+  display: flex;
+  gap: 2px;
+}
+
+.sh-opts button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.sh-opts button:hover {
+  background: #eef2f7;
+}
+
+.sh-sizes i {
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.sh-sizes button.on i {
+  background: #1d4ed8;
+}
+
+.sh-colors i {
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid rgb(0 0 0 / 0.2);
+  border-radius: 3px;
+}
+
+.sh-colors button.on {
+  box-shadow: inset 0 0 0 2px #1d4ed8;
+}
+
+/* 正在输入的标注文字 */
+.sh-text {
+  position: absolute;
+  min-width: 2em;
+  margin: -1px 0 0 -3px;
+  padding: 0 2px;
+  border: 1px dashed currentColor;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  field-sizing: content;
+  cursor: text;
+}
+
+/* 长截图：框住区域的边框（鼠标穿透），和旁边的面板 */
+html.scrollframe,
+html.scrollframe body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.sf-border {
+  position: fixed;
+  inset: 0;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.6);
+}
+
+html.scroll,
+html.scroll body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+html.scroll #app {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ss-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.ss-size {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ss-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.ss-img {
+  display: block;
+  width: 100%;
+}
+
+.ss-note {
+  min-height: 2.6em;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ss-note.warn {
+  color: #d97706;
+}
+
+.ss-auto,
+.ss-acts button {
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ss-auto.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ss-acts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.ss-acts button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 贴图：透明窗口，图片加阴影，下面可以展开文字面板 */
+html.pin,
+html.pin body {
+  height: auto;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+html.pin #app {
+  display: block;
+  padding: var(--pad, 8px);
+}
+
+.pn-card {
+  display: inline-block;
+  overflow: hidden;
+  border: 1px solid rgb(59 130 246 / 0.7);
+  background: var(--card);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+  vertical-align: top;
+}
+
+.pn-view {
+  position: relative;
+  cursor: move;
+}
+
+.pn-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.pn-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pn-line {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 0 1px;
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+  line-height: 1;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.pn-tools {
+  display: flex;
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 7px;
+  background: rgb(18 20 26 / 0.8);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pn-view:hover .pn-tools {
+  opacity: 1;
+}
+
+.pn-tools button {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: #fff;
+  font: 12px system-ui, "Microsoft YaHei", sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pn-tools button:hover {
+  background: rgb(255 255 255 / 0.18);
+}
+
+.pn-zoom {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.7);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.pn-panel {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 200px;
+  padding: 8px;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.pn-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pn-head > button,
+.pn-head select {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pn-head > button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.pn-tabs button {
+  padding: 3px 10px;
+}
+
+.pn-status {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pn-text {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg);
+  color: inherit;
+  font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+  resize: none;
+}
+
+/* 录屏：选区工具栏只留「开始录制」，框住区域的边框变红 */
+.sh-bar .sh-rec-go,
+.sh-bar.rec > * {
+  display: none;
+}
+
+.sh-bar.rec > .sh-rec-go,
+.sh-bar.rec > [data-act="cancel"] {
+  display: inline-block;
+}
+
+.sh-bar.rec > .sh-rec-go {
+  background: #ef4444;
+}
+
+html.recframe .sf-border {
+  border-color: #ef4444;
+}

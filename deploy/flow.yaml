@@ -1,4 +1,4 @@
-# 工具箱：在 Linux 构建节点上交叉编译 Windows 版（安装包 + 免安装 zip）→ 产物包 + 上传 Cloudreve 网盘 /builds/toolbox（只留最新一版，带公开分享链接）
+# 工具箱：在 Linux 构建节点上交叉编译 Windows 版（安装包 + 免安装 zip）→ 签名 → 产物包 + 上传 Cloudreve 网盘 /builds/toolbox（只留最新一版，带公开分享链接）
 # MyGo 用 purego，不需要 cgo，Linux 上 `mygo build -platform windows/amd64` 即可；Windows 专属的 Go 单测在本机跑
 name: toolbox
 concurrency:
@@ -77,6 +77,12 @@ stages:
               cp toolbox-setup-*.exe ../release/
               ls -l ../release
               echo "VERSION=$VERSION" >> "$FLOW_OUTPUT"
+          - name: 签名
+            run: |
+              # 用流水线密钥 TOOLBOX_SIGN_KEY（Ed25519）给每个发布文件签名，旁边生成 .sig 一起上传。
+              # 网盘是 http，工具箱自动更新时用内置的公钥核对签名，对不上就不安装；没有密钥时这一步失败，不发布未签名的版本
+              cd src && go run ./deploy/sign build/release/*
+              ls -l build/release
           - name: 产物包
             kind: artifact-upload
             with:

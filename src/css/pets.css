@@ -1,0 +1,319 @@
+/* 悬浮球的形象：悬浮球窗口和设置页（选形象）都用 */
+
+/* 悬浮球的形象：画好的小角色或用户的图片（src/pets.ts）。data-mood 在球上（预览里在 svg 上），
+   每个部件按 data-m 只在列出的心情里显示；角色不裁圆、没有圆形阴影 */
+.w-look {
+  width: 100%;
+  height: 100%;
+}
+
+.w-ball.w-pet,
+.w-ball.w-pet.w-ring {
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.w-ball.w-pet:hover,
+.w-ball.w-pet:active {
+  transform: none;
+}
+
+.w-pet .w-look {
+  position: relative;
+  filter: drop-shadow(0 2px 2.5px rgb(0 0 0 / 0.3));
+}
+
+.w-pet .p-fig img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: none;
+  clip-path: none;
+}
+
+.w-pet .w-look > .p-fig {
+  width: 100%;
+  height: 100%;
+}
+
+.pet-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pet-zz {
+  position: absolute;
+  inset: 0;
+}
+
+.pet-svg [data-m] {
+  display: none;
+}
+
+[data-mood="idle"] [data-m~="idle"],
+[data-mood="happy"] [data-m~="happy"],
+[data-mood="alert"] [data-m~="alert"],
+[data-mood="drag"] [data-m~="drag"],
+[data-mood="sleep"] [data-m~="sleep"] {
+  display: inline;
+}
+
+.p-fig,
+.p-tail,
+.p-shadow,
+.p-eyes,
+.w-look {
+  transform-box: fill-box;
+  transform-origin: 50% 96%;
+}
+
+.pet-ghost,
+.pet-custom {
+  --idle: p-float 3s ease-in-out infinite;
+}
+
+.pet-slime {
+  --idle: p-squish 2.4s ease-in-out infinite;
+}
+
+[data-mood="idle"] .p-fig {
+  animation: var(--idle, p-breathe 3.2s ease-in-out infinite);
+}
+
+[data-mood="happy"] .p-fig {
+  animation: p-bounce 0.7s ease-in-out infinite;
+}
+
+[data-mood="alert"] .p-fig {
+  animation: p-shake 1.6s ease-in-out infinite;
+}
+
+[data-mood="drag"] .p-fig {
+  transform-origin: 50% 0;
+  animation: p-swing 0.9s ease-in-out infinite;
+}
+
+[data-mood="sleep"] .p-fig {
+  animation: p-breathe 4.5s ease-in-out infinite;
+}
+
+.p-eyes {
+  transform-origin: 50% 50%;
+  animation: p-blink 4.6s infinite;
+}
+
+.p-tail {
+  transform-origin: 0 100%;
+  animation: p-tail 2.2s ease-in-out infinite;
+}
+
+[data-mood="happy"] .p-tail {
+  animation-duration: 0.6s;
+}
+
+[data-mood="idle"] .pet-ghost .p-shadow,
+.pet-ghost[data-mood="idle"] .p-shadow {
+  transform-origin: 50% 50%;
+  animation: p-shadow 3s ease-in-out infinite;
+}
+
+.p-led {
+  animation: p-led 1.8s steps(1) infinite;
+}
+
+[data-mood="alert"] .p-led {
+  animation-duration: 0.4s;
+}
+
+.p-sweat {
+  animation: p-sweat 1.2s ease-in infinite;
+}
+
+.p-z1,
+.p-z2 {
+  animation: p-z 2.6s ease-out infinite;
+}
+
+.p-z2 {
+  animation-delay: 1.3s;
+}
+
+/* 一直循环的动画只在 .w-live 时播：鼠标在上面、拖动中，或者隔一阵子活动几秒。
+   透明置顶窗口每一帧都要重新合成，一直动着时 GPU 进程加页面占一个核的 18% 左右，
+   停下来几乎为 0（2026-11-18 实测）；不播时回到静止的样子，睡着时只显示 zzz */
+.w-ball:not(.w-live) :is(.p-fig, .p-eyes, .p-tail, .p-shadow, .p-led, .p-sweat, .p-z1, .p-z2),
+.w-ball.w-ring:not(.w-live) {
+  animation: none;
+}
+
+/* 单击、偶尔自己动一下：只播一次 */
+.w-look.p-act-poke {
+  animation: p-poke 0.45s ease-out;
+}
+
+.w-look.p-act-hop {
+  animation: p-hop 0.8s ease-out;
+}
+
+.w-look.p-act-tilt {
+  animation: p-tilt 1.6s ease-in-out;
+}
+
+.w-pet.w-added {
+  animation: p-poke 0.6s;
+}
+
+@keyframes p-breathe {
+  50% {
+    transform: scale(1.025, 0.975);
+  }
+}
+
+@keyframes p-float {
+  50% {
+    transform: translateY(-4%);
+  }
+}
+
+@keyframes p-shadow {
+  50% {
+    transform: scale(0.8);
+    opacity: 0.1;
+  }
+}
+
+@keyframes p-squish {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  40% {
+    transform: scale(1.06, 0.93);
+  }
+  70% {
+    transform: scale(0.97, 1.04);
+  }
+}
+
+@keyframes p-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.03, 0.97);
+  }
+  50% {
+    transform: translateY(-6%) scale(0.98, 1.02);
+  }
+}
+
+@keyframes p-shake {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0);
+  }
+  62% {
+    transform: rotate(-9deg);
+  }
+  70% {
+    transform: rotate(8deg);
+  }
+  78% {
+    transform: rotate(-6deg);
+  }
+  86% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes p-swing {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes p-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes p-tail {
+  50% {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes p-led {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes p-sweat {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+@keyframes p-z {
+  from {
+    transform: translate(0, 4px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(6px, -10px);
+    opacity: 0;
+  }
+}
+
+@keyframes p-poke {
+  30% {
+    transform: scale(1.12, 0.86);
+  }
+  60% {
+    transform: scale(0.94, 1.08) translateY(-6%);
+  }
+}
+
+@keyframes p-hop {
+  20% {
+    transform: scale(1.08, 0.9);
+  }
+  45% {
+    transform: translateY(-14%) scale(0.96, 1.05);
+  }
+  70% {
+    transform: translateY(0) scale(1.06, 0.94);
+  }
+}
+
+@keyframes p-tilt {
+  25%,
+  45% {
+    transform: rotate(-10deg);
+  }
+  65%,
+  85% {
+    transform: rotate(10deg);
+  }
+}

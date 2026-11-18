@@ -18,34 +18,18 @@ import {
   imagePath,
   mosaicBlock,
   pastedPicture,
+  penEvent,
+  penHTML,
   pickPictures,
   pixelated,
   roundRect,
+  showPen,
   stamp,
 } from "./imgutil";
-import { colors, markPrefs, paintMarks, sizeOf, textFont, textLine, tools as markTools, type Mark, type Pt, type Rect, type Tool as MarkTool } from "./marks";
+import { dragMark, newMark, paintMarks, pen, sizeOf, slip, styleTextBox, textBox, textFont, textLine, tools as markTools, type Mark, type Pt, type Rect, type Tool as MarkTool } from "./marks";
+import { cover as coverOf, findLeaf as leafOf, isSplit, joinLeaf, layout as layoutOf, leaves as leavesOf, moveInto, parentOf as splitOf, splitLeaf, templates, uid, type Leaf, type Line, type Node } from "./layouttree";
 import { ImageEdit } from "./mygo";
 import { esc, onLeave, showError, toast } from "./ui";
-
-// A layout is a tree: a cell, or a split of a box in two along x (side by
-// side) or y (one over the other).
-interface Leaf {
-  id: string;
-  img: string; // a picture of pics, "" for none
-  fx: number; // where the picture sits when larger than the cell, 0 … 1
-  fy: number;
-  zoom: number; // over just covering the cell, 1 … 5
-}
-
-interface Split {
-  id: string;
-  dir: "x" | "y";
-  ratio: number; // the first part's share
-  a: Node;
-  b: Node;
-}
-
-type Node = Leaf | Split;
 
 type Layer = { id: string; hidden?: boolean } & ({ kind: "mark"; mark: Mark } | { kind: "image"; img: string; x: number; y: number; w: number; h: number });
 
@@ -60,35 +44,6 @@ interface Collage {
   layers: Layer[]; // bottom first
 }
 
-const isSplit = (n: Node): n is Split => "dir" in n;
-
-let seq = 0;
-const uid = () => `c${Date.now().toString(36)}${(seq++).toString(36)}`;
-const leaf = (): Leaf => ({ id: uid(), img: "", fx: 0.5, fy: 0.5, zoom: 1 });
-const X = (ratio: number, a: Node, b: Node): Split => ({ id: uid(), dir: "x", ratio, a, b });
-const Y = (ratio: number, a: Node, b: Node): Split => ({ id: uid(), dir: "y", ratio, a, b });
-const row = (n: number): Node => (n <= 1 ? leaf() : X(1 / n, leaf(), row(n - 1)));
-const col = (n: number): Node => (n <= 1 ? leaf() : Y(1 / n, leaf(), col(n - 1)));
-const grid = (cols: number, rows: number): Node => (rows <= 1 ? row(cols) : Y(1 / rows, row(cols), grid(cols, rows - 1)));
-
-const templates: [string, () => Node][] = [
-  ["单张", () => leaf()],
-  ["左右", () => row(2)],
-  ["上下", () => col(2)],
-  ["三列", () => row(3)],
-  ["三行", () => col(3)],
-  ["四宫格", () => grid(2, 2)],
-  ["左一右二", () => X(0.5, leaf(), col(2))],
-  ["上一下二", () => Y(0.5, leaf(), row(2))],
-  ["上二下一", () => Y(0.5, row(2), leaf())],
-  ["左一右三", () => X(0.6, leaf(), col(3))],
-  ["上一下三", () => Y(0.62, leaf(), row(3))],
-  ["六宫格", () => grid(3, 2)],
-  ["竖六格", () => grid(2, 3)],
-  ["九宫格", () => grid(3, 3)],
-  ["一大四小", () => Y(0.62, leaf(), row(4))],
-];
-
 const sizes: [string, number, number][] = [
   ["1:1", 2400, 2400],
   ["4:3", 2400, 1800],
@@ -102,13 +57,11 @@ const sizes: [string, number, number][] = [
 type Tool = "move" | MarkTool;
 
 // What stays while the toolbox shows other tools.
-let state: Collage = { w: 2400, h: 2400, gap: 12, pad: 16, radius: 0, bg: "#ffffff", root: grid(2, 2), layers: [] };
+let state: Collage = { w: 2400, h: 2400, gap: 12, pad: 16, radius: 0, bg: "#ffffff", root: templates[5]![1](), layers: [] }; // 四宫格
 const pics = new Map<string, HTMLCanvasElement>(); // the pictures, by id; kept for undo
 let past: string[] = [];
 let future: string[] = [];
 let tool: Tool = "move";
-let markColor = markPrefs().color;
-let markSize = markPrefs().size;
 let sel: { kind: "cell" | "layer"; id: string } | null = null;
 let tab: "layout" | "layers" = "layout";
 
@@ -155,54 +108,19 @@ function fixSel() {
   if (sel?.kind === "layer" && !state.layers.some((l) => l.id === sel!.id)) sel = null;
 }
 
-function leaves(n: Node = state.root): Leaf[] {
-  return isSplit(n) ? [...leaves(n.a), ...leaves(n.b)] : [n];
-}
-
-const findLeaf = (id: string) => leaves().find((l) => l.id === id) ?? null;
-
-function parentOf(id: string, n: Node = state.root): Split | null {
-  if (!isSplit(n)) return null;
-  if (n.a.id === id || n.b.id === id) return n;
-  return parentOf(id, n.a) ?? parentOf(id, n.b);
-}
+const leaves = (n: Node = state.root) => leavesOf(n);
+const findLeaf = (id: string) => leafOf(state.root, id);
+const parentOf = (id: string) => splitOf(state.root, id);
 
 const unit = () => Math.min(state.w, state.h) / 1000;
 
 // layout places the cells and the lines between them, in collage pixels.
 function layout() {
-  const cells = new Map<string, Rect>();
-  const lines: { node: Split; r: Rect; box: Rect }[] = [];
-  const gap = state.gap * unit();
   const pad = state.pad * unit();
-  const walk = (n: Node, r: Rect) => {
-    if (!isSplit(n)) {
-      cells.set(n.id, r);
-      return;
-    }
-    if (n.dir === "x") {
-      const aw = (r.w - gap) * n.ratio;
-      walk(n.a, { x: r.x, y: r.y, w: aw, h: r.h });
-      walk(n.b, { x: r.x + aw + gap, y: r.y, w: r.w - gap - aw, h: r.h });
-      lines.push({ node: n, r: { x: r.x + aw, y: r.y, w: gap, h: r.h }, box: r });
-    } else {
-      const ah = (r.h - gap) * n.ratio;
-      walk(n.a, { x: r.x, y: r.y, w: r.w, h: ah });
-      walk(n.b, { x: r.x, y: r.y + ah + gap, w: r.w, h: r.h - gap - ah });
-      lines.push({ node: n, r: { x: r.x, y: r.y + ah, w: r.w, h: gap }, box: r });
-    }
-  };
-  walk(state.root, { x: pad, y: pad, w: state.w - pad * 2, h: state.h - pad * 2 });
-  return { cells, lines };
+  return layoutOf(state.root, { x: pad, y: pad, w: state.w - pad * 2, h: state.h - pad * 2 }, state.gap * unit());
 }
 
-// cover is where a cell's picture goes: covering the cell, zoomed, moved.
-function cover(l: Leaf, r: Rect, img: HTMLCanvasElement) {
-  const s = Math.max(r.w / img.width, r.h / img.height) * l.zoom;
-  const w = img.width * s;
-  const h = img.height * s;
-  return { x: r.x + (r.w - w) * l.fx, y: r.y + (r.h - h) * l.fy, w, h };
-}
+const cover = (l: Leaf, r: Rect, img: HTMLCanvasElement) => coverOf(l, r, img.width, img.height);
 
 // ---- Drawing ----
 
@@ -679,7 +597,7 @@ function act(a: string) {
 // ---- The stage ----
 
 let drawing: { mark: Mark; mosaic: HTMLCanvasElement | null } | null = null;
-let hoverLine: { node: Split; r: Rect; box: Rect } | null = null;
+let hoverLine: Line | null = null;
 let swapTo: string | null = null;
 let text: { el: HTMLTextAreaElement; at: Pt; size: number; color: string } | null = null;
 
@@ -697,7 +615,7 @@ function cellAt(p: Pt) {
 // of the screen: where lines meet, the one the point is across from.
 function lineAt(p: Pt) {
   const t = 5 / k;
-  let best: ReturnType<typeof layout>["lines"][number] | null = null;
+  let best: Line | null = null;
   let bestD = Infinity;
   for (const l of layout().lines) {
     const { r } = l;
@@ -723,7 +641,7 @@ function layerAt(p: Pt) {
 type Drag =
   | { kind: "layer"; id: string; start: Pt; orig: Layer; before: string }
   | { kind: "resize"; id: string; start: Pt; orig: Layer; before: string }
-  | { kind: "line"; node: Split; box: Rect; before: string }
+  | { kind: "line"; node: Line["node"]; box: Rect; before: string }
   | { kind: "pan"; id: string; start: Pt; orig: Leaf; before: string; moved: boolean }
   | { kind: "mark" };
 
@@ -737,14 +655,13 @@ function bindStage(stage: HTMLElement) {
     }
     const p = toCollage(e);
     if (tool !== "move") {
-      const size = sizeOf(tool, markSize) / k;
       if (tool === "text") {
         e.preventDefault();
         openText(e, p);
         return;
       }
-      const mark: Mark = tool === "pen" || tool === "mosaic" ? { kind: tool, pts: [p], color: markColor, size } : { kind: tool, a: p, b: p, color: markColor, size };
-      drawing = { mark, mosaic: tool === "mosaic" ? pixelated(view!, mosaicBlock(size)) : null };
+      const size = sizeOf(tool, pen.size) / k;
+      drawing = { mark: newMark(tool, p, size), mosaic: tool === "mosaic" ? pixelated(view!, mosaicBlock(size)) : null };
       drag = { kind: "mark" };
     } else {
       const cur = sel?.kind === "layer" ? state.layers.find((l) => l.id === sel!.id) : null;
@@ -782,22 +699,7 @@ function bindStage(stage: HTMLElement) {
       return;
     }
     if (drag.kind === "mark" && drawing) {
-      const m = drawing.mark;
-      if ("pts" in m) {
-        const last = m.pts[m.pts.length - 1]!;
-        if (Math.hypot(p.x - last.x, p.y - last.y) * k >= 1.5) m.pts.push(p);
-      } else if ("a" in m) {
-        let b = p;
-        if (e.shiftKey && m.kind !== "arrow") {
-          const d = Math.max(Math.abs(p.x - m.a.x), Math.abs(p.y - m.a.y));
-          b = { x: m.a.x + Math.sign(p.x - m.a.x) * d, y: m.a.y + Math.sign(p.y - m.a.y) * d };
-        } else if (e.shiftKey) {
-          const ang = Math.round(Math.atan2(p.y - m.a.y, p.x - m.a.x) / (Math.PI / 4)) * (Math.PI / 4);
-          const len = Math.hypot(p.x - m.a.x, p.y - m.a.y);
-          b = { x: m.a.x + len * Math.cos(ang), y: m.a.y + len * Math.sin(ang) };
-        }
-        m.b = b;
-      }
+      dragMark(drawing.mark, p, e.shiftKey, 1.5 / k);
       return drawOver();
     }
     if (drag.kind === "layer" || drag.kind === "resize") {
@@ -850,7 +752,7 @@ function bindStage(stage: HTMLElement) {
     if (d.kind === "mark") {
       const m = drawing?.mark;
       drawing = null;
-      if (m && (!("a" in m) || Math.abs(m.b.x - m.a.x) * k >= 3 || Math.abs(m.b.y - m.a.y) * k >= 3)) change(() => state.layers.push({ id: uid(), kind: "mark", mark: m }));
+      if (m && !slip(m, 3 / k)) change(() => state.layers.push({ id: uid(), kind: "mark", mark: m }));
       return render();
     }
     if (d.kind === "pan") {
@@ -897,7 +799,6 @@ function bindStage(stage: HTMLElement) {
     if (tool !== "move" || l?.kind !== "mark" || l.mark.kind !== "text") return;
     const m = l.mark;
     change(() => (state.layers = state.layers.filter((x) => x.id !== l.id)));
-    markColor = m.color;
     const r = stage.getBoundingClientRect();
     openText({ clientX: r.left + ox + m.at.x * k, clientY: r.top + oy + m.at.y * k + (m.size * k * textLine) / 2 }, { x: m.at.x, y: m.at.y + (m.size * textLine) / 2 }, m);
   });
@@ -916,38 +817,24 @@ function zoomCell(l: Leaf, zoom: number) {
   render();
 }
 
+// openText opens a text box where the pointer is, at the point p of the
+// collage, or again on a text taken off to edit.
 function openText(e: { clientX: number; clientY: number }, p: Pt, again?: Extract<Mark, { kind: "text" }>) {
   const stage = page!.querySelector<HTMLElement>(".cg-stage")!;
   const r = stage.getBoundingClientRect();
-  const size = again ? again.size * k : sizeOf("text", markSize);
-  const el = document.createElement("textarea");
-  el.className = "ie-text";
-  el.spellcheck = false;
-  el.rows = 1;
-  el.value = again?.text ?? "";
-  stage.append(el);
-  text = { el, at: { x: p.x, y: p.y - (size * textLine) / 2 / k }, size, color: again?.color ?? markColor };
-  Object.assign(el.style, { left: `${e.clientX - r.left}px`, top: `${e.clientY - r.top - (size * textLine) / 2}px`, color: text.color, font: textFont(size), lineHeight: String(textLine) });
-  const grow = () => {
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-    el.style.width = "auto";
-    el.style.width = `${Math.max(40, el.scrollWidth + 4)}px`;
-  };
-  el.addEventListener("input", grow);
-  el.addEventListener("pointerdown", (ev) => ev.stopPropagation());
-  el.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" || (ev.key === "Enter" && ev.ctrlKey)) {
-      ev.preventDefault();
-      ev.stopPropagation();
+  const size = again ? again.size * k : sizeOf("text", pen.size);
+  const color = again?.color ?? pen.color;
+  const el = textBox(
+    stage,
+    "ie-text",
+    () => {
       closeText(true);
       render();
-    }
-  });
-  setTimeout(() => {
-    el.focus();
-    grow();
-  });
+    },
+    again?.text,
+  );
+  text = { el, at: { x: p.x, y: p.y - (size * textLine) / 2 / k }, size, color };
+  styleTextBox(el, e.clientX - r.left, e.clientY - r.top - (size * textLine) / 2, color, size);
 }
 
 function closeText(keep: boolean) {
@@ -978,10 +865,7 @@ function sideHTML() {
   if (tool !== "move") {
     return `
       <h3>${esc(markTools.find(([t]) => t === tool)?.[1] ?? "")}</h3>
-      <h3>粗细</h3>
-      <div class="ie-chips ie-sizes">${[0, 1, 2].map((i) => `<button data-size="${i}">${["细", "中", "粗"][i]}</button>`).join("")}</div>
-      <h3 class="ie-color-h">颜色</h3>
-      <div class="ie-colors">${colors.map((c) => `<button data-color="${c}" title="${c}"><i style="background:${c}"></i></button>`).join("")}<label class="ie-custom" title="自定义颜色"><input type="color" /></label></div>
+      ${penHTML()}
       <p class="muted ie-hint">画好的每一笔都是一个图层，可以在「选择」工具下点中拖动、删除，在「图层」里调整上下顺序。</p>`;
   }
   const tabs = `<div class="s-seg cg-tabs"><button data-tab="layout">布局</button><button data-tab="layers">图层 ${state.layers.length ? state.layers.length : ""}</button></div>`;
@@ -1053,14 +937,7 @@ function sideHTML() {
 function updateSide(side: HTMLElement) {
   side.querySelectorAll<HTMLElement>(".cg-tabs [data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
   if (tool !== "move") {
-    side.querySelectorAll<HTMLElement>("[data-size]").forEach((b) => b.classList.toggle("on", Number(b.dataset.size) === markSize));
-    const noColor = tool === "mosaic";
-    side.querySelector<HTMLElement>(".ie-colors")!.hidden = noColor;
-    side.querySelector<HTMLElement>(".ie-color-h")!.hidden = noColor;
-    side.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === markColor));
-    const custom = side.querySelector<HTMLInputElement>(".ie-custom input")!;
-    custom.parentElement!.classList.toggle("on", !colors.includes(markColor));
-    if (!colors.includes(markColor)) custom.value = markColor;
+    showPen(side, tool);
     return;
   }
   if (tab === "layers") {
@@ -1104,16 +981,11 @@ function updateSide(side: HTMLElement) {
 // applyTemplate swaps the layout, keeping the pictures in their order.
 function applyTemplate(i: number) {
   change(() => {
-    const old = leaves().filter((l) => l.img);
     const root = templates[i]![1]();
-    const cells = leaves(root);
-    old.forEach((l, j) => {
-      if (cells[j]) Object.assign(cells[j]!, { img: l.img, fx: l.fx, fy: l.fy, zoom: l.zoom });
-    });
-    const extra = old.slice(cells.length);
+    const extra = moveInto(state.root, root);
     state.root = root;
-    extra.forEach((l, j) => state.layers.push(floating(l.img, j)));
-    if (extra.length) toast(`新布局只有 ${cells.length} 格，${extra.length} 张放成了浮动图片`);
+    extra.forEach((img, j) => state.layers.push(floating(img, j)));
+    if (extra.length) toast(`新布局只有 ${leaves().length} 格，${extra.length} 张放成了浮动图片`);
     sel = null;
   });
 }
@@ -1121,46 +993,25 @@ function applyTemplate(i: number) {
 function splitCell(dir: "x" | "y") {
   if (sel?.kind !== "cell") return;
   const id = sel.id;
-  change(() => {
-    const l = findLeaf(id)!;
-    const s: Split = { id: uid(), dir, ratio: 0.5, a: { ...l }, b: leaf() };
-    replace(id, s);
-    sel = { kind: "cell", id: l.id };
-  });
+  change(() => (state.root = splitLeaf(state.root, id, dir)));
 }
 
 function joinCell() {
   if (sel?.kind !== "cell") return;
   const id = sel.id;
-  const p = parentOf(id);
-  if (!p) return;
+  if (!parentOf(id)) return;
   change(() => {
-    const keep = p.a.id === id ? p.b : p.a;
-    const gone = findLeaf(id)!;
-    replace(p.id, keep);
     // Its picture goes to an empty cell, or floats.
-    if (gone.img) {
-      const empty = leaves().find((l) => !l.img);
-      if (empty) Object.assign(empty, { img: gone.img, fx: 0.5, fy: 0.5, zoom: 1 });
-      else state.layers.push(floating(gone.img));
-    }
+    const r = joinLeaf(state.root, id)!;
+    state.root = r.root;
+    if (r.left) state.layers.push(floating(r.left));
     sel = null;
   });
 }
 
-// replace puts a node where the node of an id is.
-function replace(id: string, with_: Node) {
-  if (state.root.id === id) {
-    state.root = with_;
-    return;
-  }
-  const p = parentOf(id)!;
-  if (p.a.id === id) p.a = with_;
-  else p.b = with_;
-}
-
 function bindSide(side: HTMLElement) {
   side.addEventListener("click", (e) => {
+    if (penEvent(e)) return render();
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
     if (!b || b.disabled) {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-layer]");
@@ -1182,14 +1033,6 @@ function bindSide(side: HTMLElement) {
       return resizeCanvas(w!, h!);
     }
     if (b.dataset.bg) return change(() => (state.bg = b.dataset.bg!));
-    if (b.dataset.size) {
-      markSize = Number(b.dataset.size);
-      return render();
-    }
-    if (b.dataset.color) {
-      markColor = b.dataset.color;
-      return render();
-    }
     if (b.dataset.order) return order(b.dataset.order as "top");
     if (b.dataset.eye) {
       const id = b.dataset.eye;
@@ -1221,6 +1064,7 @@ function bindSide(side: HTMLElement) {
   let before = "";
   side.addEventListener("pointerdown", () => (before = snap()));
   side.addEventListener("input", (e) => {
+    if (penEvent(e)) return render();
     const i = e.target as HTMLInputElement;
     if (i.dataset.st) {
       state[i.dataset.st as "gap"] = Number(i.value);
@@ -1229,10 +1073,6 @@ function bindSide(side: HTMLElement) {
     if (i.dataset.cell) {
       const cell = sel?.kind === "cell" ? findLeaf(sel.id) : null;
       if (cell) cell.zoom = Number(i.value) / 100;
-      return render();
-    }
-    if (i.type === "color" && i.closest(".ie-custom")) {
-      markColor = i.value;
       return render();
     }
   });

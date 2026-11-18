@@ -9,9 +9,10 @@
 import { onFileDrop } from "mygo-runtime";
 import { editIcons, icons, markIcons } from "./icons";
 import { ImageEdit, Shot, events, type EditImage } from "./mygo";
-import { colors, markPrefs, paintMarks, sizeOf, sizes, textFont, textLine, tools as markTools, type Mark, type Pt, type Rect, type Tool as MarkTool } from "./marks";
-import { backgrounds, bgCSS, canvas, copyCanvas, decode, decodeBlob, encodeCanvas, exportDialog, fillBackground, imagePath, maxPixels, mosaicBlock, pastedPicture, pixelated, roundRect, stamp } from "./imgutil";
+import { dragMark, newMark, paintMarks, pen, sizeOf, slip, styleTextBox, textBox, textLine, tools as markTools, type Mark, type Pt, type Rect, type Tool as MarkTool } from "./marks";
+import { backgrounds, bgCSS, canvas, copyCanvas, decode, decodeBlob, encodeCanvas, exportDialog, fillBackground, imagePath, maxPixels, mosaicBlock, pastedPicture, penEvent, penHTML, pixelated, roundRect, showPen, stamp } from "./imgutil";
 import { renderCollage } from "./collage";
+import { fitRatio as fitBox, resizeBox } from "./geom";
 import { renderMerge } from "./merge";
 import { esc, leave, onLeave, openDialog, showError, toast } from "./ui";
 
@@ -87,8 +88,6 @@ let crop: Rect | null = null; // the crop box being set, in the picture's pixels
 // free, -1 for the picture's own.
 let ratioPick = "0";
 let markTool: MarkTool = "rect";
-let markColor = markPrefs().color;
-let markSize = markPrefs().size;
 let picks: string[] = loadPicks();
 let z = 1; // the stage's pixels per picture pixel
 let tx = 0; // where the picture's top left is on the stage
@@ -791,58 +790,11 @@ function toStage(e: { clientX: number; clientY: number }): Pt {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
-// fitRatio is the largest box of a width / height in the picture, centered.
-function fitRatio(r: number): Rect {
-  const W = doc!.cur.width;
-  const H = doc!.cur.height;
-  let w = W;
-  let h = w / r;
-  if (h > H) {
-    h = H;
-    w = h * r;
-  }
-  return { x: Math.round((W - w) / 2), y: Math.round((H - h) / 2), w: Math.round(w), h: Math.round(h) };
-}
+const fitRatio = (r: number) => fitBox(doc!.cur.width, doc!.cur.height, r);
 
 // resizeCrop moves a handle of the crop box to a point, keeping the ratio
 // when there is one, within the picture.
-function resizeCrop(o: Rect, h: string, p: Pt): Rect {
-  const W = doc!.cur.width;
-  const H = doc!.cur.height;
-  let [l, t, r, b] = [o.x, o.y, o.x + o.w, o.y + o.h];
-  if (h.includes("w")) l = clamp(p.x, 0, r - 1);
-  if (h.includes("e")) r = clamp(p.x, l + 1, W);
-  if (h.includes("n")) t = clamp(p.y, 0, b - 1);
-  if (h.includes("s")) b = clamp(p.y, t + 1, H);
-  const ratio = ratioOf();
-  if (ratio) {
-    let w = r - l;
-    let hh = b - t;
-    const horiz = h.includes("e") || h.includes("w");
-    const vert = h.includes("n") || h.includes("s");
-    if (horiz && (!vert || w / ratio >= hh)) hh = w / ratio;
-    else w = hh * ratio;
-    // Within the picture, from the side that does not move.
-    const maxW = h.includes("w") ? r : h.includes("e") ? W - l : Math.min(o.x + o.w / 2, W - o.x - o.w / 2) * 2;
-    const maxH = h.includes("n") ? b : h.includes("s") ? H - t : Math.min(o.y + o.h / 2, H - o.y - o.h / 2) * 2;
-    const k = Math.min(1, maxW / w, maxH / hh);
-    w *= k;
-    hh *= k;
-    if (h.includes("w")) l = r - w;
-    else if (h.includes("e")) r = l + w;
-    else {
-      l = o.x + o.w / 2 - w / 2;
-      r = l + w;
-    }
-    if (h.includes("n")) t = b - hh;
-    else if (h.includes("s")) b = t + hh;
-    else {
-      t = o.y + o.h / 2 - hh / 2;
-      b = t + hh;
-    }
-  }
-  return { x: Math.round(l), y: Math.round(t), w: Math.max(1, Math.round(r - l)), h: Math.max(1, Math.round(b - t)) };
-}
+const resizeCrop = (o: Rect, h: string, p: Pt) => resizeBox(o, h, p, doc!.cur.width, doc!.cur.height, ratioOf());
 
 function bindStage(stage: HTMLElement) {
   let drag: { kind: "pan" | "move" | "resize" | "new"; h?: string; start: Pt; at: Pt; tx: number; ty: number; orig: Rect | null } | null = null;
@@ -867,14 +819,13 @@ function bindStage(stage: HTMLElement) {
       const inside = p.x >= crop.x && p.x <= crop.x + crop.w && p.y >= crop.y && p.y <= crop.y + crop.h;
       drag = { kind: h ? "resize" : inside ? "move" : "new", h, start: p, at, tx, ty, orig: { ...crop } };
     } else if (mode === "mark") {
-      const size = sizeOf(markTool, markSize) / z;
       if (markTool === "text") {
         e.preventDefault();
         openText(at, p);
         return;
       }
-      const mark: Mark = markTool === "pen" || markTool === "mosaic" ? { kind: markTool, pts: [p], color: markColor, size } : { kind: markTool, a: p, b: p, color: markColor, size };
-      drawing = { mark, mosaic: markTool === "mosaic" ? pixelated(doc.cur, mosaicBlock(size)) : null };
+      const size = sizeOf(markTool, pen.size) / z;
+      drawing = { mark: newMark(markTool, p, size), mosaic: markTool === "mosaic" ? pixelated(doc.cur, mosaicBlock(size)) : null };
       drag = { kind: "new", start: p, at, tx, ty, orig: null };
     } else if (mode === "pick") {
       pickAt(p, true);
@@ -897,24 +848,7 @@ function bindStage(stage: HTMLElement) {
       return draw();
     }
     if (drawing) {
-      const m = drawing.mark;
-      const q = { x: p.x, y: p.y };
-      if ("pts" in m) {
-        const last = m.pts[m.pts.length - 1]!;
-        if (Math.hypot(q.x - last.x, q.y - last.y) * z >= 1.5) m.pts.push(q);
-      } else if ("a" in m) {
-        let b = q;
-        // Shift keeps a square, a circle, or a line at 45° steps.
-        if (e.shiftKey && m.kind !== "arrow") {
-          const d = Math.max(Math.abs(q.x - m.a.x), Math.abs(q.y - m.a.y));
-          b = { x: m.a.x + Math.sign(q.x - m.a.x) * d, y: m.a.y + Math.sign(q.y - m.a.y) * d };
-        } else if (e.shiftKey) {
-          const ang = Math.round(Math.atan2(q.y - m.a.y, q.x - m.a.x) / (Math.PI / 4)) * (Math.PI / 4);
-          const len = Math.hypot(q.x - m.a.x, q.y - m.a.y);
-          b = { x: m.a.x + len * Math.cos(ang), y: m.a.y + len * Math.sin(ang) };
-        }
-        m.b = b;
-      }
+      dragMark(drawing.mark, p, e.shiftKey, 1.5 / z);
       return drawOver();
     }
     if (mode !== "crop" || !drag.orig) return;
@@ -939,8 +873,7 @@ function bindStage(stage: HTMLElement) {
     if (drawing && doc) {
       const m = drawing.mark;
       drawing = null;
-      // A shape too small to see was a slip.
-      if (!("a" in m) || Math.abs(m.b.x - m.a.x) * z >= 3 || Math.abs(m.b.y - m.a.y) * z >= 3) commit({ kind: "mark", mark: m });
+      if (!slip(m, 3 / z)) commit({ kind: "mark", mark: m });
     }
     if (mode === "crop" && crop && (crop.w < 2 || crop.h < 2)) crop = full();
     draw();
@@ -964,37 +897,13 @@ function applyCrop() {
 // ---- Text, typed in a box over the stage ----
 
 function openText(at: Pt, p: Pt) {
-  const s = stageBox()!;
-  const size = sizeOf("text", markSize);
-  const el = document.createElement("textarea");
-  el.className = "ie-text";
-  el.spellcheck = false;
-  el.rows = 1;
-  s.append(el);
-  const top = at.y - (size * textLine) / 2;
-  text = { el, at: { x: p.x, y: p.y - (size * textLine) / 2 / z }, size, color: markColor };
-  Object.assign(el.style, { left: `${at.x}px`, top: `${top}px`, color: markColor, font: textFont(size), lineHeight: String(textLine) });
-  const grow = () => {
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-    el.style.width = "auto";
-    el.style.width = `${Math.max(40, el.scrollWidth + 4)}px`;
-  };
-  el.addEventListener("input", grow);
-  el.addEventListener("pointerdown", (e) => e.stopPropagation());
-  el.addEventListener("keydown", (e) => {
-    // Esc, or Ctrl+Enter, ends the text; Enter starts a new line.
-    if (e.key === "Escape" || (e.key === "Enter" && e.ctrlKey)) {
-      e.preventDefault();
-      e.stopPropagation();
-      closeText(true);
-      draw();
-    }
+  const size = sizeOf("text", pen.size);
+  const el = textBox(stageBox()!, "ie-text", () => {
+    closeText(true);
+    draw();
   });
-  setTimeout(() => {
-    el.focus();
-    grow();
-  });
+  text = { el, at: { x: p.x, y: p.y - (size * textLine) / 2 / z }, size, color: pen.color };
+  styleTextBox(el, at.x, at.y - (size * textLine) / 2, pen.color, size);
 }
 
 function closeText(keep: boolean) {
@@ -1142,10 +1051,7 @@ function sideHTML() {
       return `
         <h3>标注</h3>
         <div class="ie-icons ie-marks">${markTools.map(([t, n]) => `<button data-mark="${t}" title="${n}">${markIcons[t]}<span>${n}</span></button>`).join("")}</div>
-        <h3>粗细</h3>
-        <div class="ie-chips ie-sizes">${[0, 1, 2].map((i) => `<button data-size="${i}">${["细", "中", "粗"][i]}</button>`).join("")}</div>
-        <h3 class="ie-color-h">颜色</h3>
-        <div class="ie-colors">${colors.map((c) => `<button data-color="${c}" title="${c}"><i style="background:${c}"></i></button>`).join("")}<label class="ie-custom" title="自定义颜色"><input type="color" /></label></div>
+        ${penHTML()}
         <p class="muted ie-hint">按住 Shift 画正方形、圆或 45° 箭头；文字回车换行，Esc 或点别处完成。粗细按屏幕上看到的算，放大后画得更细。</p>`;
     case "frame":
       return `
@@ -1208,18 +1114,7 @@ function updateSide(side: HTMLElement) {
     });
   } else if (mode === "mark") {
     side.querySelectorAll<HTMLElement>("[data-mark]").forEach((b) => b.classList.toggle("on", b.dataset.mark === markTool));
-    side.querySelectorAll<HTMLElement>("[data-size]").forEach((b) => {
-      const i = Number(b.dataset.size);
-      b.classList.toggle("on", i === markSize);
-      b.title = markTool === "text" ? `${sizes.text[i]} 号字` : "";
-    });
-    const noColor = markTool === "mosaic";
-    side.querySelector<HTMLElement>(".ie-colors")!.hidden = noColor;
-    side.querySelector<HTMLElement>(".ie-color-h")!.hidden = noColor;
-    side.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === markColor));
-    const custom = side.querySelector<HTMLInputElement>(".ie-custom input")!;
-    custom.parentElement!.classList.toggle("on", !colors.includes(markColor));
-    if (!colors.includes(markColor)) custom.value = markColor;
+    showPen(side, markTool);
   } else if (mode === "frame") {
     side.querySelectorAll<HTMLElement>("[data-bg]").forEach((b) => b.classList.toggle("on", b.dataset.bg === frame.bg));
     side.querySelectorAll<HTMLInputElement>("[data-fr]").forEach((i) => {
@@ -1246,6 +1141,7 @@ function thumbSize(c: HTMLCanvasElement): [number, number] {
 function bindSide(side: HTMLElement) {
   side.addEventListener("click", (e) => {
     if (!doc) return;
+    if (penEvent(e)) return draw();
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>("button");
     if (!b) return;
@@ -1272,16 +1168,6 @@ function bindSide(side: HTMLElement) {
     if (b.dataset.mark) {
       closeText(true);
       markTool = b.dataset.mark as MarkTool;
-      return draw();
-    }
-    if (b.dataset.size) {
-      markSize = Number(b.dataset.size);
-      saveMarkPrefs();
-      return draw();
-    }
-    if (b.dataset.color) {
-      markColor = b.dataset.color;
-      saveMarkPrefs();
       return draw();
     }
     if (b.dataset.bg) {
@@ -1338,6 +1224,7 @@ function bindSide(side: HTMLElement) {
   });
   side.addEventListener("input", (e) => {
     if (!doc) return;
+    if (penEvent(e)) return draw();
     const i = e.target as HTMLInputElement;
     const d = doc;
     if (i.dataset.adj) {
@@ -1379,21 +1266,9 @@ function bindSide(side: HTMLElement) {
       }
       return draw();
     }
-    if (i.type === "color" && i.closest(".ie-custom")) {
-      markColor = i.value;
-      return draw();
-    }
   });
   // The number boxes show what they hold once left.
   side.addEventListener("focusout", () => setTimeout(draw));
-}
-
-function saveMarkPrefs() {
-  // Shared with the screenshots: the colors of the list and the sizes.
-  try {
-    const p = JSON.parse(localStorage.getItem("shot-mark") || "{}");
-    localStorage.setItem("shot-mark", JSON.stringify({ ...p, size: markSize, ...(colors.includes(markColor) ? { color: markColor } : {}) }));
-  } catch {}
 }
 
 // ---- Keys ----
