@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -113,6 +116,41 @@ func (st *Settings) PickPetImage() (bool, error) {
 	return st.pickPicture("选择悬浮球的形象", "pet-", func(s *AppSettings, name string) {
 		s.Widget.Pet, s.Widget.Image, s.Widget.Images = "custom", name, append(s.Widget.Images, name)
 	})
+}
+
+// AddPetImage adds a picture the image editor made, a PNG in base64, to the
+// floating ball's looks and makes it the one.
+func (st *Settings) AddPetImage(data string) error {
+	if len(st.current().Widget.Images) >= maxPetImages {
+		return fmt.Errorf("最多 %d 张自定义形象，先在「设置 → 悬浮球」里删掉几张", maxPetImages)
+	}
+	b, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return err
+	}
+	if _, err := png.DecodeConfig(bytes.NewReader(b)); err != nil {
+		return errors.New("不是 PNG 图片")
+	}
+	dir, err := configPath("appearance")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	name := "pet-" + time.Now().Format("20060102150405.000") + ".png"
+	name = strings.Replace(name, ".", "-", 1) // no dot but the extension's
+	if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+		return err
+	}
+	if err := st.change(func(s *AppSettings) {
+		s.Widget.Pet, s.Widget.Image, s.Widget.Images = "custom", name, append(s.Widget.Images, name)
+	}); err != nil {
+		os.Remove(filepath.Join(dir, name))
+		return err
+	}
+	cleanAppearance(st.current())
+	return nil
 }
 
 // RemovePetImage deletes one of the floating ball's pictures; the ball

@@ -1288,6 +1288,13 @@ export const Settings = {
   about(): Promise<AboutInfo> {
     return call("Settings.About");
   },
+  /**
+   * AddPetImage adds a picture the image editor made, a PNG in base64, to the
+   * floating ball's looks and makes it the one.
+   */
+  addPetImage(data: string): Promise<void> {
+    return call("Settings.AddPetImage", data);
+  },
   /** ClearBackground takes the main window's background picture away. */
   clearBackground(): Promise<void> {
     return call("Settings.ClearBackground");

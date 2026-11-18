@@ -1,8 +1,10 @@
 // bun test .dev/test/image.test.ts
 // The image tool's arithmetic: 创造拼图's layout tree, the crop box, 合并文档's
-// long picture, and drawing marks.
+// long picture, drawing marks, and 去背景.
 import { expect, test } from "bun:test";
+import { borderColor, cutout, opaqueBox, type Pixels } from "../../src/cutout";
 import { fitRatio, longLayout, maxLong, resizeBox } from "../../src/geom";
+import { grow, inpaint } from "../../src/inpaint";
 import { cover, findLeaf, joinLeaf, layout, leaves, moveInto, parentOf, splitLeaf, templates, type Leaf, type Node } from "../../src/layouttree";
 import { dragMark, newMark, slip, type Mark } from "../../src/marks";
 
@@ -156,4 +158,156 @@ test("marks follow the pointer, with Shift squared or at 45°", () => {
   expect(slip(newMark("ellipse", { x: 0, y: 0 }, 2), 3)).toBe(true);
   expect(slip(rect, 3)).toBe(false);
   expect(slip(pen, 3)).toBe(false);
+});
+
+// A 40×40 white picture with a red ring, white inside it, and a gray dot
+// on the white outside.
+function ringPicture(): Pixels {
+  const w = 40;
+  const h = 40;
+  const data = new Uint8ClampedArray(w * h * 4).fill(255);
+  const set = (x: number, y: number, c: [number, number, number]) => data.set([...c, 255], (y * w + x) * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const d = Math.hypot(x - 20, y - 20);
+      if (d >= 8 && d <= 12) set(x, y, [220, 30, 30]);
+    }
+  set(3, 3, [190, 190, 190]);
+  return { data, width: w, height: h };
+}
+
+const alphaAt = (p: Pixels, d: Uint8ClampedArray, x: number, y: number) => d[(y * p.width + x) * 4 + 3];
+
+test("the background goes from the edges in; what the outline closes in stays", () => {
+  const p = ringPicture();
+  expect(borderColor(p)).toEqual([255, 255, 255]);
+  const out = cutout(p, { border: true, seeds: [], tol: 20 });
+  expect(alphaAt(p, out, 0, 0)).toBe(0); // the white outside
+  expect(alphaAt(p, out, 20, 20)).toBe(255); // the white inside the ring
+  expect(alphaAt(p, out, 30, 20)).toBe(255); // the ring
+  expect(alphaAt(p, out, 3, 3)).toBeGreaterThan(200); // gray, far from white at 20: kept, its edge a little soft
+  // A larger tolerance takes the gray dot too.
+  expect(alphaAt(p, cutout(p, { border: true, seeds: [], tol: 80 }), 3, 3)).toBe(0);
+  // A click inside takes the inside away, the ring stays.
+  const seeded = cutout(p, { border: true, seeds: [{ x: 20, y: 20 }], tol: 20 });
+  expect(alphaAt(p, seeded, 20, 20)).toBe(0);
+  expect(alphaAt(p, seeded, 30, 20)).toBe(255);
+  // Nothing asked for, nothing taken.
+  expect([...cutout(p, { border: false, seeds: [], tol: 20 })]).toEqual([...p.data]);
+});
+
+test("the edge is soft, without the background's color in it", () => {
+  // A white picture with a vertical band from white to red.
+  const w = 30;
+  const h = 4;
+  const data = new Uint8ClampedArray(w * h * 4).fill(255);
+  for (let y = 0; y < h; y++)
+    for (let x = 10; x < 20; x++) {
+      const k = (x - 9) / 10; // 0.1 … 1
+      data.set([255, Math.round(255 - 225 * k), Math.round(255 - 225 * k), 255], (y * w + x) * 4);
+    }
+  const p = { data, width: w, height: h };
+  const out = cutout(p, { border: true, seeds: [], tol: 10 });
+  // The first pixel past the tolerance is part transparent, and redder
+  // than it looked over white.
+  const firstKept = [...Array(10).keys()].map((k) => (1 * w + 10 + k) * 4).find((j) => out[j + 3]! > 0)!;
+  expect(out[firstKept + 3]!).toBeLessThan(255);
+  expect(out[firstKept + 1]!).toBeLessThan(data[firstKept + 1]!);
+  // Deep in the band it is whole.
+  expect(out[(1 * w + 19) * 4 + 3]).toBe(255);
+});
+
+test("the opaque box is what is left", () => {
+  const p = ringPicture();
+  const out = cutout(p, { border: true, seeds: [], tol: 80 });
+  expect(opaqueBox({ data: out, width: 40, height: 40 })).toEqual({ x: 8, y: 8, w: 25, h: 25 });
+  expect(opaqueBox({ data: new Uint8ClampedArray(16), width: 2, height: 2 })).toBeNull();
+});
+
+test("a thin frame around the picture goes with the background", () => {
+  // The ring picture inside a dark frame 1 pixel wide.
+  const p = ringPicture();
+  for (let i = 0; i < 40; i++)
+    for (const [x, y] of [
+      [i, 0],
+      [i, 39],
+      [0, i],
+      [39, i],
+    ] as const)
+      p.data.set([20, 20, 25, 255], (y * 40 + x) * 4);
+  expect(borderColor(p)).toEqual([255, 255, 255]); // the background, not the frame
+  const out = cutout(p, { border: true, seeds: [], tol: 20 });
+  expect(alphaAt(p, out, 0, 0)).toBe(0); // the frame
+  expect(alphaAt(p, out, 5, 20)).toBe(0); // the white inside the frame
+  expect(alphaAt(p, out, 20, 20)).toBe(255); // inside the ring
+  expect(alphaAt(p, out, 30, 20)).toBe(255);
+});
+
+// A picture of w × h by a function of x and y, and a mask of a box in it.
+function made(w: number, h: number, f: (x: number, y: number) => [number, number, number]): Pixels {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data.set([...f(x, y), 255], (y * w + x) * 4);
+  return { data, width: w, height: h };
+}
+function boxMask(w: number, h: number, x0: number, y0: number, bw: number, bh: number) {
+  const m = new Uint8Array(w * h);
+  for (let y = y0; y < y0 + bh; y++) for (let x = x0; x < x0 + bw; x++) m[y * w + x] = 1;
+  return m;
+}
+// The mean difference, in the mask, between a fill and the truth.
+function err(a: Uint8ClampedArray, truth: Pixels, m: Uint8Array) {
+  let s = 0;
+  let n = 0;
+  for (let i = 0; i < m.length; i++)
+    if (m[i]) {
+      for (let k = 0; k < 3; k++) s += Math.abs(a[i * 4 + k]! - truth.data[i * 4 + k]!);
+      n += 3;
+    }
+  return s / n;
+}
+// The truth with a "watermark" painted over the mask.
+function marked(p: Pixels, m: Uint8Array): Pixels {
+  const data = new Uint8ClampedArray(p.data);
+  for (let i = 0; i < m.length; i++) if (m[i]) data.set([255, 0, 255, 255], i * 4);
+  return { data, width: p.width, height: p.height };
+}
+
+test("a flat color and a gradient fill in as they were", async () => {
+  const flat = made(60, 40, () => [40, 120, 200]);
+  const m = boxMask(60, 40, 20, 12, 18, 10);
+  expect(err(await inpaint(marked(flat, m), m), flat, m)).toBeLessThan(1);
+  const grad = made(80, 50, (x) => [x * 3, 100, 255 - x * 3]);
+  const m2 = boxMask(80, 50, 30, 15, 16, 14);
+  expect(err(await inpaint(marked(grad, m2), m2), grad, m2)).toBeLessThan(12);
+});
+
+test("stripes go on through the hole", async () => {
+  const stripes = made(96, 64, (x) => (x % 8 < 4 ? [20, 20, 20] : [230, 230, 230]));
+  const m = boxMask(96, 64, 40, 24, 14, 14);
+  const out = await inpaint(marked(stripes, m), m);
+  // Each filled row is stripes again: dark and light alternating, not a
+  // gray average.
+  let gray = 0;
+  for (let i = 0; i < m.length; i++) if (m[i] && out[i * 4]! > 70 && out[i * 4]! < 180) gray++;
+  expect(gray / (14 * 14)).toBeLessThan(0.25);
+  expect(err(out, stripes, m)).toBeLessThan(60);
+  // The rest of the picture is untouched.
+  for (let i = 0; i < m.length; i++) if (!m[i]) expect(out[i * 4]).toBe(stripes.data[i * 4]!);
+});
+
+test("a mask grows by its edge", () => {
+  const m = boxMask(10, 10, 4, 4, 2, 2);
+  expect(grow(m, 10, 10, 1).reduce((s, v) => s + v, 0)).toBe(4 + 8);
+  expect(grow(m, 10, 10, 0)).toEqual(m);
+});
+
+test("a transparent background fills in transparent", async () => {
+  // Left half opaque red, right half transparent; a hole on the right.
+  const p = made(60, 40, (x) => (x < 30 ? [200, 30, 30] : [0, 0, 0]));
+  for (let i = 0; i < 60 * 40; i++) if (i % 60 >= 30) p.data[i * 4 + 3] = 0;
+  const m = boxMask(60, 40, 40, 14, 12, 12);
+  const out = await inpaint(marked(p, m), m);
+  let opaque = 0;
+  for (let i = 0; i < m.length; i++) if (m[i] && out[i * 4 + 3]! > 40) opaque++;
+  expect(opaque).toBe(0);
 });

@@ -7100,3 +7100,51 @@ a.fl-out-v:hover {
   width: 100%;
   padding: 9px 0 !important;
 }
+
+/* 去背景 */
+.ie-stage[data-mode="cutout"] {
+  cursor: crosshair;
+}
+
+.ie-cut-bg {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.2);
+}
+
+.ie-cut-tools {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 8px;
+}
+
+.ie-row-start {
+  justify-content: flex-start;
+}
+
+/* 去水印、打码 */
+.ie-stage:is([data-mode="watermark"], [data-mode="censor"]) {
+  cursor: crosshair;
+}
+
+.ie-seg {
+  margin-bottom: 8px;
+}
+
+.ie-seg button {
+  flex: 1;
+  border: 0 !important;
+  background: none !important;
+}
+
+.ie-seg button.on {
+  background: var(--card) !important;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+}
+
+/* 左栏工具多了：放不下时自己滚动 */
+.ie-rail {
+  overflow-y: auto;
+}
