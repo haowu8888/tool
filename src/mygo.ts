@@ -885,6 +885,11 @@ export interface ShotSettings {
   /** where the last picture was saved */
   saveDir: string;
   /**
+   * CopyFile copies a screenshot as a PNG file too, so that it pastes
+   * into a folder; some apps then paste the file instead of the picture.
+   */
+  copyFile: boolean;
+  /**
    * AI is the service the ai engine translates with, set apart from the
    * AI writing's: a fast model suits translating.
    */

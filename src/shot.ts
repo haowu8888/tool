@@ -25,6 +25,12 @@ export const shotTool = {
         <button class="sh-go" data-mode="ocr"><span class="sh-glyph">文</span><b>识别文字</b><span class="muted">框选后直接识别</span></button>
       </div>
       <section class="s-group">
+        <h2>复制</h2>
+        <div class="s-card">
+          <label class="s-row"><span>复制时附带图片文件<small class="muted">这样可以直接粘贴到文件夹里；但有的软件会把它当成文件发送，而不是图片</small></span><input type="checkbox" class="sh-copy-file" /></label>
+        </div>
+      </section>
+      <section class="s-group">
         <h2>翻译</h2>
         <div class="s-card">
           <div class="s-row"><span>翻译成<small class="muted">自动：中文译成英文，其他语言译成中文</small></span>
@@ -66,8 +72,11 @@ export const shotTool = {
     });
     p.querySelectorAll<HTMLElement>(".sh-to button").forEach((b) => b.addEventListener("click", () => void save((s) => (s.shot.to = b.dataset.to!))));
     p.querySelectorAll<HTMLElement>(".sh-engine button").forEach((b) => b.addEventListener("click", () => void save((s) => (s.shot.engine = b.dataset.engine!))));
+    const copyFile = p.querySelector<HTMLInputElement>(".sh-copy-file")!;
+    copyFile.addEventListener("change", () => void save((s) => (s.shot.copyFile = copyFile.checked)));
     const render = () => {
       if (!p.querySelector(".sh-to")) return;
+      copyFile.checked = settings.shot.copyFile;
       p.querySelectorAll<HTMLElement>(".sh-to button").forEach((b) => b.classList.toggle("on", b.dataset.to === (settings.shot.to || "auto")));
       const engine = settings.shot.engine || "auto";
       p.querySelectorAll<HTMLElement>(".sh-engine button").forEach((b) => b.classList.toggle("on", b.dataset.engine === engine));

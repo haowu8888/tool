@@ -256,16 +256,23 @@ func (c *Clips) watch() {
 
 // readClip reads the clipboard: files, or else a text, or else a picture.
 // Copied cells come with a picture of them too, and a text is what they
-// mean. Nil for nothing to keep.
+// mean; a copied screenshot may come with its file, and is a picture.
+// Nil for nothing to keep.
 func readClip() (*clipEntry, error) {
 	formats := mygo.Clipboard.Formats()
 	e := &clipEntry{}
-	switch {
-	case slices.Contains(formats, transfer.FileList) || slices.Contains(formats, transfer.URIList):
-		files, err := mygo.Clipboard.ReadFiles()
-		if err != nil || len(files) == 0 {
+	var files []string
+	if slices.Contains(formats, transfer.FileList) || slices.Contains(formats, transfer.URIList) {
+		var err error
+		if files, err = mygo.Clipboard.ReadFiles(); err != nil || len(files) == 0 {
 			return nil, err
 		}
+		if len(files) == 1 && isShotFile(files[0]) && slices.Contains(formats, transfer.PNG) {
+			files = nil
+		}
+	}
+	switch {
+	case files != nil:
 		e.Kind, e.Files = "files", files
 		e.Text = strings.Join(files, "\n")
 	case slices.Contains(formats, transfer.Text):

@@ -64,6 +64,9 @@ type ShotSettings struct {
 	// reached), google, bing, or ai for the AI service of AI.
 	Engine  string `json:"engine"`
 	SaveDir string `json:"saveDir"` // where the last picture was saved
+	// CopyFile copies a screenshot as a PNG file too, so that it pastes
+	// into a folder; some apps then paste the file instead of the picture.
+	CopyFile bool `json:"copyFile"`
 	// AI is the service the ai engine translates with, set apart from the
 	// AI writing's: a fast model suits translating.
 	AI AISettings `json:"ai"`
@@ -418,7 +421,11 @@ func (s *Shot) Finish(display int64, r ShotRect, action, layer string) error {
 func (s *Shot) use(img *image.RGBA, d mygo.Display, rect image.Rectangle, action string) error {
 	switch action {
 	case "copy":
-		return copyImage(img)
+		b, err := encodePNG(img)
+		if err != nil {
+			return err
+		}
+		return s.copyPNG(b)
 	case "qr":
 		if s.onQR != nil {
 			s.onQR(readQR(img))
@@ -490,6 +497,57 @@ func copyImage(img image.Image) error {
 		return err
 	}
 	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, b))))
+}
+
+// copyPNG copies a screenshot, with its file too when set to: Explorer
+// pastes only files, never a picture.
+func (s *Shot) copyPNG(b []byte) error {
+	pic := transfer.NewItem(transfer.Bytes(transfer.PNG, b))
+	if !s.settings.current().Shot.CopyFile {
+		return mygo.Clipboard.Write(transfer.New(pic))
+	}
+	path, err := writeShotFile(b)
+	if err != nil {
+		return err
+	}
+	files, err := transfer.FileData(path)
+	if err != nil {
+		return err
+	}
+	return mygo.Clipboard.Write(transfer.New(append([]transfer.Item{pic}, files.Items()...)...))
+}
+
+// shotFileDir holds the files copied screenshots paste as.
+func shotFileDir() string { return filepath.Join(os.TempDir(), "Toolbox", "shots") }
+
+// isShotFile is whether a path is a copied screenshot's file.
+func isShotFile(path string) bool {
+	return strings.EqualFold(filepath.Dir(path), shotFileDir())
+}
+
+// writeShotFile writes a copied screenshot's file, named as pasted, and
+// removes those of more than a day ago: a paste copies the file away.
+func writeShotFile(b []byte) (string, error) {
+	dir := shotFileDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	if old, err := os.ReadDir(dir); err == nil {
+		for _, e := range old {
+			if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > 24*time.Hour {
+				os.Remove(filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+	name := "截图 " + time.Now().Format("2006-01-02 150405")
+	path := filepath.Join(dir, name+".png")
+	for n := 2; ; n++ {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		path = filepath.Join(dir, fmt.Sprintf("%s (%d).png", name, n))
+	}
+	return path, os.WriteFile(path, b, 0o644)
 }
 
 // save asks where to save a picture, starting in the folder of the last.
@@ -692,7 +750,7 @@ func (s *Shot) CopyPin(id string) error {
 	if err != nil {
 		return err
 	}
-	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, p.png))))
+	return s.copyPNG(p.png)
 }
 
 // SavePin saves a pinned picture.
