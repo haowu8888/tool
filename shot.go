@@ -425,7 +425,7 @@ func (s *Shot) use(img *image.RGBA, d mygo.Display, rect image.Rectangle, action
 		if err != nil {
 			return err
 		}
-		return s.copyPNG(b)
+		return copyPNG(s.settings, b)
 	case "qr":
 		if s.onQR != nil {
 			s.onQR(readQR(img))
@@ -499,11 +499,12 @@ func copyImage(img image.Image) error {
 	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, b))))
 }
 
-// copyPNG copies a screenshot, with its file too when set to: Explorer
-// pastes only files, never a picture.
-func (s *Shot) copyPNG(b []byte) error {
+// copyPNG copies a picture, with its file too when set to: Explorer
+// pastes only files, never a picture. Screenshots, pins and the image
+// editor copy so.
+func copyPNG(settings *Settings, b []byte) error {
 	pic := transfer.NewItem(transfer.Bytes(transfer.PNG, b))
-	if !s.settings.current().Shot.CopyFile {
+	if !settings.current().Shot.CopyFile {
 		return mygo.Clipboard.Write(transfer.New(pic))
 	}
 	path, err := writeShotFile(b)
@@ -525,20 +526,29 @@ func isShotFile(path string) bool {
 	return strings.EqualFold(filepath.Dir(path), shotFileDir())
 }
 
-// writeShotFile writes a copied screenshot's file, named as pasted, and
-// removes those of more than a day ago: a paste copies the file away.
+// cleanShotFiles removes the copied screenshots' files of more than a day
+// ago: a paste copies the file away. It runs at start too, for whoever
+// stopped copying.
+func cleanShotFiles() {
+	dir := shotFileDir()
+	old, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range old {
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > 24*time.Hour {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
+// writeShotFile writes a copied screenshot's file, named as pasted.
 func writeShotFile(b []byte) (string, error) {
 	dir := shotFileDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	if old, err := os.ReadDir(dir); err == nil {
-		for _, e := range old {
-			if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > 24*time.Hour {
-				os.Remove(filepath.Join(dir, e.Name()))
-			}
-		}
-	}
+	cleanShotFiles()
 	name := "截图 " + time.Now().Format("2006-01-02 150405")
 	path := filepath.Join(dir, name+".png")
 	for n := 2; ; n++ {
@@ -750,7 +760,7 @@ func (s *Shot) CopyPin(id string) error {
 	if err != nil {
 		return err
 	}
-	return s.copyPNG(p.png)
+	return copyPNG(s.settings, p.png)
 }
 
 // SavePin saves a pinned picture.

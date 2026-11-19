@@ -5,7 +5,7 @@ node_modules/
 mygo_windows_*.syso
 /.dev/*.png
 /.dev/*.txt
-/.dev/js/
+/.dev/js/tmp-*
 /.dev/*.log
 /.dev/*.exe
 /.dev/*.jpg

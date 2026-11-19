@@ -7,14 +7,11 @@ import { focusSearch, launcherTool } from "./launcher";
 import { monitorTool } from "./monitor";
 import { servicesTool } from "./services";
 import { flowTool } from "./flow";
-import { devTool } from "./devtools";
-import { boardTool } from "./board";
 import { recordTool } from "./record";
-import { imageTool } from "./imageedit";
 import { focusAdd, notesTool } from "./notes";
 import { shotTool } from "./shot";
 import { isHidden, kbd, onSettings, orderTools, renderSettings, settings, shortcutKeys } from "./settings";
-import { errorText, esc, leave, onLeave, openDialog, toast } from "./ui";
+import { errorText, esc, leave, onLeave, openDialog, showError, toast } from "./ui";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -25,6 +22,27 @@ interface Tool {
   icon: string; // an SVG of src/icons.ts
   render(panel: HTMLElement): void;
 }
+
+// lazyTool loads a big tool's code the first time it shows, so that the
+// window starts without it, as the notes load their editor.
+function lazyTool(id: string, name: string, icon: string, load: () => Promise<Tool>): Tool {
+  return {
+    id,
+    name,
+    icon,
+    render(panel) {
+      panel.innerHTML = "";
+      const shown = shows; // a later select may show something else first
+      load().then((tool) => {
+        if (shown === shows) tool.render(panel);
+      }, showError);
+    },
+  };
+}
+
+const boardTool = lazyTool("board", "看板", icons.board, () => import("./board").then((m) => m.boardTool));
+const imageTool = lazyTool("image", "图片编辑", icons.image, () => import("./imageedit").then((m) => m.imageTool));
+const devTool = lazyTool("dev", "开发工具", icons.dev, () => import("./devtools").then((m) => m.devTool));
 
 const tools: Tool[] = [
   launcherTool,
@@ -232,6 +250,7 @@ function renderNav() {
 }
 
 let current = "";
+let shows = 0; // counts select's renders
 
 // select shows a tool in the panel, unless it shows already. Hidden tools
 // show too, when a shortcut asks for them.
@@ -242,6 +261,7 @@ function select(id: string) {
   current = tool.id;
   app.querySelectorAll<HTMLElement>(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.id === tool.id));
   leave(); // the last tool's listeners
+  shows++;
   tool.render(panel);
 }
 

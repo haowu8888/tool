@@ -304,16 +304,19 @@ func (u *Updates) download(link, file string, size int64) error {
 }
 
 // watch checks a minute after the start and then every six hours, while
-// the settings let it.
+// the settings let it. It looks every ten minutes by the wall clock, so
+// that turning it on or a night asleep does not put it off for hours.
 func (u *Updates) watch() {
 	time.Sleep(time.Minute)
+	var last time.Time
 	for {
-		if u.settings.current().Update.Auto {
+		if u.settings.current().Update.Auto && time.Since(last.Round(0)) >= 6*time.Hour {
+			last = time.Now()
 			if _, err := u.Check(); err != nil {
 				log.Println("update:", err)
 			}
 		}
-		time.Sleep(6 * time.Hour)
+		time.Sleep(10 * time.Minute)
 	}
 }
 

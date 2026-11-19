@@ -73,6 +73,7 @@ func main() {
 
 	// Notes' images and attachments, which windows load by URL.
 	serveNoteFiles()
+	go cleanShotFiles()
 	serveAppearance()
 	// Screenshots and pinned pictures, which their windows load by URL.
 	shot.serve()

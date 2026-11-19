@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/transfer"
 )
 
 // ImageEditOpened tells the image editor's page that a picture waits for
@@ -349,7 +348,7 @@ func (m *ImageEdit) Copy(data string) error {
 	if err != nil {
 		return err
 	}
-	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, b))))
+	return copyPNG(m.settings, b)
 }
 
 // Reveal shows a saved picture in Explorer.

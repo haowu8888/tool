@@ -1,0 +1,87 @@
+// 开发工具: JSON as a folding tree (fold, unfold lazily, levels, path),
+// the timestamp's picker, the calculator's keypad and history, a QR code
+// made and read back, a typed UUID count.
+(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const out = {};
+  const errs = [];
+  addEventListener("error", (e) => errs.push(e.message));
+  document.querySelector('.nav-item[data-id="dev"]').click();
+  await wait(300);
+  out.tabs = [...document.querySelectorAll(".dv-tabs button")].map((b) => b.textContent).join("/");
+  const tab = async (t) => {
+    document.querySelector(`.dv-tabs [data-tab="${t}"]`).click();
+    await wait(250);
+  };
+  const type = async (sel, v, ms = 500) => {
+    const el = document.querySelector(sel);
+    el.value = v;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    await wait(ms);
+  };
+  await tab("json");
+  document.querySelector('.dv-view [data-view="tree"]').click();
+  const big = { users: Array.from({ length: 60 }, (_, i) => ({ id: i, name: "用户" + i, tags: ["a", "b"], ok: i % 2 === 0, x: null })), "a b": 1 };
+  await type(".dv-in", JSON.stringify(big));
+  const tree = document.querySelector(".dv-tree");
+  out.treeShown = !tree.hidden && document.querySelector(".dv-out").hidden;
+  const nodes = () => tree.querySelectorAll(".jt-n").length;
+  const folded = () => tree.querySelectorAll(".jt-n.fold").length;
+  out.bigStart = [nodes(), folded()]; // over 400 nodes: two levels open
+  const first = tree.querySelector('.jt-n[data-p="$.users[0]"]');
+  first.querySelector(".jt-tg").click();
+  out.unfolded = [first.classList.contains("fold"), first.querySelectorAll(".jt-l").length];
+  first.querySelector(".jt-tg").click();
+  out.refolded = first.classList.contains("fold");
+  tree.querySelector('[data-level="all"]').click();
+  out.all = [nodes(), folded()];
+  tree.querySelector('[data-level="0"]').click();
+  out.none = [nodes(), folded(), tree.querySelector(".jt-sum").textContent];
+  tree.querySelector('[data-level="1"]').click();
+  out.paths = [...tree.querySelectorAll(".jt-k, .jt-ix")].slice(0, 4).map((e) => e.dataset.path);
+  await type(".dv-in", '{"b":[1,2],"a":{"c":"工具","d":true}}');
+  out.small = [nodes(), folded(), tree.textContent.replace(/\s+/g, "").slice(0, 60)];
+  document.querySelector('[data-view="text"]').click();
+  out.text = document.querySelector(".dv-out").value.split("\n").length;
+  document.querySelector('[data-view="tree"]').click();
+  await type(".dv-in", "{bad");
+  out.jsonErr = document.querySelector(".dv-msg").textContent;
+  await tab("time");
+  const pick = document.querySelector(".dv-pick");
+  pick.value = "2026-11-15T08:30";
+  pick.dispatchEvent(new Event("input", { bubbles: true }));
+  await wait(100);
+  out.picked = [document.querySelector(".dv-ts").value, document.querySelector(".dv-conv b").textContent];
+  await type(".dv-ts", "1763164800", 100);
+  out.pickFromTs = pick.value;
+  await tab("calc");
+  const key = (k) => document.querySelector(`.dv-keys [data-k="${k}"]`).click();
+  document.querySelector(".dv-calc-in").value = "";
+  for (const k of ["clear", "(", "3", "+", "4", ")", "×", "2", "^", "3"]) key(k);
+  out.live = [document.querySelector(".dv-calc-in").value, document.querySelector(".dv-calc-r").textContent];
+  key("equals");
+  out.eq = [document.querySelector(".dv-calc-in").value, document.querySelector(".dv-hist .dv-h")?.textContent];
+  key("÷");
+  key("8");
+  out.goOn = [document.querySelector(".dv-calc-in").value, document.querySelector(".dv-calc-r").textContent];
+  await type(".dv-calc-in", "255", 50);
+  out.alt = document.querySelector(".dv-calc-alt").textContent;
+  await type(".dv-calc-in", "1/0", 50);
+  key("equals");
+  out.err = document.querySelector(".dv-calc-r").textContent;
+  await type(".dv-calc-in", "123456789*1000", 50);
+  out.group = document.querySelector(".dv-calc-r").textContent;
+  key("clear");
+  await tab("qr");
+  await type(".dv-in", "http://cloudreve.haowu.fun/s/qLux");
+  await wait(400);
+  const img = document.querySelector(".dv-qr img");
+  out.qrBack = img ? (await mygo.call("Dev.DecodeQR", img.src.split(",")[1])).texts : null;
+  await tab("gen");
+  await type(".dv-n", "7", 50);
+  out.uuids = document.querySelector(".dv-uuid").value.split("\n").length;
+  await type(".dv-n", "1", 50);
+  await tab("json");
+  out.errs = errs;
+  return out;
+})();

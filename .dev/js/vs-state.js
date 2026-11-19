@@ -1,0 +1,1 @@
+Promise.all([mygo.call("VirtualScreen.IsActive"), mygo.call("VirtualScreen.Displays")]).then(([a, d]) => JSON.stringify({ active: a, displays: d.map((x) => `${x.name.slice(4)} ${x.virtual ? "virtual" : "physical"} ${x.active ? x.width + "x" + x.height : "off"}${x.primary ? " primary" : ""}${x.mine ? " mine" : ""}`) }))

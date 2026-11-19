@@ -1,0 +1,7 @@
+# 屏幕录制
+
+从 CLAUDE.md 拆出来的细节：改这部分代码前先读。
+
+## 实现
+
+- `record.go` + `record_windows.go` + `src/record.ts`：工具「屏幕录制」（2026-11-15 加，侧栏在截图翻译后面）。框选复用截图的选区窗口（`Shot.start("record")`，选区页 `mode === "record"` 时工具栏只留「● 开始录制」和 ✕，单击不拖=整个屏幕，Enter/双击开始；普通截图工具栏也有录屏按钮，快捷键 R），`Shot.Record` 把选区宽高取偶数（H.264 要求）后交给 `Record.begin`：区域外放红框（复用 `/?longframe&rec`，`recframe` 类变红）、旁边放面板 `/?rec`（`ShowInactive` 不抢焦点，拖动用 `Record.DragPanel`），两者都 `SetContentProtection` 不进视频；整屏时不放框、面板放在屏幕底部中间。录制在一个锁定的 OS 线程上（`recordScreen`）：每帧 GDI `BitBlt` 到常驻的 DIB（`DrawIconEx` 画上指针），Media Foundation `MFCreateSinkWriterFromURL` 写 MP4（H.264 Main，输入 RGB32、`MF_MT_DEFAULT_STRIDE` 为正=自上而下，码率 0.07 bit/像素/帧夹在 2–16 Mbps；先开硬件编码，失败再用软件）；声音用 WASAPI：扬声器 loopback +（可选）麦克风，各自按包里的 QPC 时间戳放到时间轴上（loopback 没声音时不给包，靠时间戳补静音），转成 48k 立体声浮点、线性插值重采样，落后时钟 300ms 混音写 AAC 192k，停止时把剩下的补完。时钟是 `clock100ns`（QPC，和 WASAPI 的时间戳同源），暂停只记 `pausedAt/pausedFor`，暂停期间不截帧、丢掉声音包。帧时间按帧格取整，跟不上就跳帧（2520×1680 60 帧实测不丢）。存到 `settings.record.dir`（默认 `视频\工具箱录屏`），文件名「录屏 日期 时间.mp4」；面板：录制中 计时/暂停/停止/丢弃（点两下才丢），保存后变成卡片（复制文件/播放/所在位置/关闭，声音没录上写在 `note` 里）；从工具页开始时工具箱先藏起来，录完再出来。工具页列出文件夹里的 MP4（时长读 `moov/mvhd`，`mp4Duration`），缩略图和播放用 `<video>` 经 `shot` scheme 的 `video/<文件名>`（`http.ServeFile`，支持 Range），复制=`Clipboard.WriteFiles`，删除进回收站；Open/Reveal/Copy/Delete 只认录屏文件夹里的 .mp4（`mine`）。退出时 `record.quit` 停止并等它写完（最多 5 秒），否则 MP4 没有结尾放不了。单测 `record_windows_test.go`（录 2 秒核对时长、暂停不计入、整屏帧数）要在桌面上跑：SSH 会话截不了屏会跳过，用 `.dev/desktest.ps1`
