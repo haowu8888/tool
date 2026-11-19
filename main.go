@@ -81,6 +81,8 @@ func main() {
 	clips.serve()
 	// The pictures the image editor opens.
 	imageEdit.serve()
+	// The pages the dev tools' HTML tab runs.
+	dev.serve()
 
 	// Start in the saved appearance, without a flash of the other.
 	prefs := settings.Get()

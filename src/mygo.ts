@@ -1946,9 +1946,9 @@ export const Flow = {
 } as const;
 
 /**
- * Dev is the developer's small tools that need Go: QR codes, and saving or
- * copying a picture. The rest, as JSON, timestamps and the calculator, is
- * the page's own.
+ * Dev is the developer's small tools that need Go: QR codes, saving or
+ * copying a picture, and serving the pages the HTML tab runs. The rest, as
+ * JSON, timestamps and the calculator, is the page's own.
  */
 export const Dev = {
   /** CopyImage puts a PNG in base64 on the clipboard. */
@@ -1969,6 +1969,14 @@ export const Dev = {
   /** QR makes a QR code of a text: a PNG in base64. */
   qr(text: string, size: number): Promise<string> {
     return call("Dev.QR", text, size);
+  },
+  /**
+   * RunHTML serves a page of the HTML tab under a new address, which its
+   * preview frame loads. A frame of the app's own page could not run it: it
+   * takes the page's CSP, which runs no inline script.
+   */
+  runHTML(doc: string): Promise<string> {
+    return call("Dev.RunHTML", doc);
   },
   /** SaveImage asks where to save a PNG in base64. */
   saveImage(data: string, name: string): Promise<void> {

@@ -1,6 +1,6 @@
 // The developer's small tools: JSON (as a folding tree), timestamps, a
 // calculator, QR codes (made, or read from a picture or the screen), UUIDs
-// and passwords.
+// and passwords, and running HTML.
 import { onFileDrop } from "mygo-runtime";
 import { icons } from "./icons";
 import { calc, calcFunctions, show as showNum, tidy } from "./calc";
@@ -8,13 +8,14 @@ import { Dev, Notes, events, type DevQRResult } from "./mygo";
 import { ago } from "./services";
 import { errorText, esc, onLeave, showError, toast } from "./ui";
 
-type Tab = "json" | "time" | "calc" | "qr" | "gen";
+type Tab = "json" | "time" | "calc" | "qr" | "gen" | "html";
 const tabs: [Tab, string][] = [
   ["json", "JSON"],
   ["time", "时间戳"],
   ["calc", "计算器"],
   ["qr", "二维码"],
   ["gen", "UUID / 密码"],
+  ["html", "HTML 运行"],
 ];
 const tabKey = "dev-tab";
 
@@ -54,7 +55,7 @@ export const devTool = {
       p.querySelectorAll<HTMLElement>(".dv-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
       for (const fn of leaveTab.splice(0)) fn();
       const off = (fn: () => void) => leaveTab.push(fn);
-      ({ json: renderJSON, time: renderTime, calc: renderCalc, qr: renderQR, gen: renderGen })[t](body, off);
+      ({ json: renderJSON, time: renderTime, calc: renderCalc, qr: renderQR, gen: renderGen, html: renderHTML })[t](body, off);
     };
     p.querySelectorAll<HTMLElement>(".dv-tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab as Tab)));
     onLeave(() => {
@@ -793,4 +794,232 @@ function renderGen(box: HTMLElement) {
   n.addEventListener("input", () => (kept.uuidN = n.value));
   uuid();
   pw();
+}
+
+// ---- Running HTML ----
+
+// An HTML page runs in a sandboxed frame, as a page Go serves
+// (Dev.RunHTML): what it logs and throws shows in the console below it.
+type Code = { html: string; auto: boolean };
+const codeKey = "dev-html";
+const sample = `<!doctype html>
+<html>
+<head>
+<style>
+  body {
+    font-family: system-ui, "Microsoft YaHei", sans-serif;
+    padding: 16px;
+  }
+  h1 {
+    color: #4f7cff;
+  }
+</style>
+</head>
+<body>
+<h1>你好</h1>
+<button id="btn">点我</button>
+<script>
+  let n = 0;
+  document.getElementById("btn").addEventListener("click", () => {
+    n++;
+    console.log("点了", n, "次", { n });
+  });
+</script>
+</body>
+</html>
+`;
+
+function loadCode(): Code {
+  try {
+    const c = JSON.parse(localStorage.getItem(codeKey) ?? "null");
+    if (c && typeof c.html === "string") {
+      // Kept from when CSS and JS had boxes of their own.
+      let html = c.html;
+      if (c.css?.trim()) html += `\n<style>\n${c.css}</style>\n`;
+      if (c.js?.trim()) html += `\n<script>\n${c.js}</script>\n`;
+      return { html, auto: c.auto !== false };
+    }
+  } catch {}
+  return { html: sample, auto: true };
+}
+
+// bridge runs first in the frame: it sends console calls and uncaught
+// errors to the tool. first is the page's line the box starts on.
+const bridge = (first: number) => `(() => {
+const show = (v) => {
+  const seen = new WeakSet();
+  const go = (v, d) => {
+    if (typeof v === "string") return d ? JSON.stringify(v) : v;
+    if (typeof v === "function") return "ƒ " + (v.name || "anonymous") + "()";
+    if (typeof v === "bigint") return v + "n";
+    if (typeof v === "symbol" || v === null || typeof v !== "object") return String(v);
+    if (v instanceof Error) return v.stack || v.name + ": " + v.message;
+    if (v instanceof Element) return "<" + v.tagName.toLowerCase() + (v.id ? "#" + v.id : "") + (v.className && typeof v.className === "string" ? "." + v.className.trim().split(/\\s+/).join(".") : "") + ">";
+    if (seen.has(v)) return "[循环引用]";
+    if (d > 3) return Array.isArray(v) ? "[…]" : "{…}";
+    seen.add(v);
+    if (Array.isArray(v)) return "[" + v.slice(0, 100).map((x) => go(x, d + 1)).join(", ") + (v.length > 100 ? ", …" : "") + "]";
+    if (v instanceof Map) return "Map(" + v.size + ") {" + [...v].slice(0, 50).map(([k, x]) => go(k, d + 1) + " => " + go(x, d + 1)).join(", ") + "}";
+    if (v instanceof Set) return "Set(" + v.size + ") {" + [...v].slice(0, 50).map((x) => go(x, d + 1)).join(", ") + "}";
+    let keys;
+    try { keys = Object.keys(v); } catch { return String(v); }
+    const name = v.constructor && v.constructor !== Object && v.constructor.name ? v.constructor.name + " " : "";
+    return name + "{" + keys.slice(0, 50).map((k) => (/^[A-Za-z_$][\\w$]*$/.test(k) ? k : JSON.stringify(k)) + ": " + go(v[k], d + 1)).join(", ") + (keys.length > 50 ? ", …" : "") + "}";
+  };
+  try { return go(v, 0); } catch (e) { return String(v); }
+};
+const post = (level, args) => { try { parent.postMessage({ devrun: 1, level, text: args.map(show).join(" ") }, "*"); } catch {} };
+for (const level of ["log", "info", "warn", "error", "debug"]) {
+  const orig = console[level];
+  console[level] = (...a) => { post(level, a); orig.apply(console, a); };
+}
+const clear = console.clear;
+console.clear = () => { post("clear", []); clear.call(console); };
+addEventListener("error", (e) => {
+  const at = e.filename === location.href && e.lineno >= ${first} ? "（第 " + (e.lineno - ${first} + 1) + " 行）" : "";
+  post("error", [(e.error && e.error.stack && !at ? e.error.stack : e.message || "出错了") + at]);
+});
+addEventListener("unhandledrejection", (e) => post("error", ["未处理的 Promise 拒绝：", e.reason]));
+})();`;
+
+// withBridge puts the bridge before the page, which keeps its lines as
+// they are in the box.
+function withBridge(html: string) {
+  const head = (first: number) => `<!doctype html><meta charset="utf-8"><script>${bridge(first)}</script>\n`;
+  // The bridge's text is as many lines whatever the number in it.
+  const first = head(0).split("\n").length;
+  return head(first) + html.replace(/^(\s*)<!doctype[^>]*>/i, "$1");
+}
+
+function renderHTML(box: HTMLElement, off: (fn: () => void) => void) {
+  box.innerHTML = `
+    <div class="dv-two dv-run">
+      <div class="dv-col">
+        <div class="dv-bar"><b>HTML</b><span class="l-spacer"></span><label class="dv-opt" title="停止输入后自动运行"><input type="checkbox" class="dv-auto" /> 自动运行</label><button class="primary" data-do="run" title="Ctrl+Enter">运行</button></div>
+        <textarea class="dv-text dv-code" spellcheck="false" placeholder="<h1>你好</h1>&#10;<script>console.log(1)</script>"></textarea>
+        <div class="dv-acts"><button data-do="copy-code">复制</button><button data-do="sample">示例</button><button data-do="clear-code">清空</button><span class="muted dv-tip">Tab 缩进，Ctrl+Enter 运行；代码只在本机沙箱里运行，调不了工具箱</span></div>
+      </div>
+      <div class="dv-col">
+        <div class="dv-bar"><b>预览</b><span class="l-spacer"></span><button data-do="run">刷新</button></div>
+        <iframe class="dv-frame" sandbox="allow-scripts allow-modals allow-forms" referrerpolicy="no-referrer" title="预览"></iframe>
+        <div class="dv-bar"><b>控制台</b><span class="dv-count muted"></span><span class="l-spacer"></span><button data-do="clear-log">清空</button></div>
+        <div class="dv-log"></div>
+      </div>
+    </div>`;
+  const q = <T extends HTMLElement>(s: string) => box.querySelector<T>(s)!;
+  const code = loadCode();
+  const el = q<HTMLTextAreaElement>(".dv-code");
+  el.value = code.html;
+  let frame = q<HTMLIFrameElement>(".dv-frame");
+  const log = q<HTMLElement>(".dv-log");
+  const auto = q<HTMLInputElement>(".dv-auto");
+  auto.checked = code.auto;
+
+  let saveTimer = 0;
+  const save = () => {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    try {
+      localStorage.setItem(codeKey, JSON.stringify(code));
+    } catch {}
+  };
+
+  // The console: what the frame logs, at most so many lines.
+  let lines = 0;
+  const count = () => (q<HTMLElement>(".dv-count").textContent = lines ? String(lines) : "");
+  const clearLog = () => {
+    log.innerHTML = `<div class="dv-log-empty muted">console.log 和报错会显示在这里</div>`;
+    lines = 0;
+    count();
+  };
+  const addLog = (level: string, text: string) => {
+    if (level === "clear") return clearLog();
+    if (!lines) log.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = `dv-log-l ${level}`;
+    row.textContent = text;
+    log.append(row);
+    if (++lines > 500) log.firstElementChild?.remove();
+    count();
+    log.scrollTop = log.scrollHeight;
+  };
+  const message = (e: MessageEvent) => {
+    if (e.source !== frame.contentWindow || e.data?.devrun !== 1) return;
+    addLog(String(e.data.level), String(e.data.text));
+  };
+  window.addEventListener("message", message);
+  off(() => window.removeEventListener("message", message));
+
+  let runTimer = 0;
+  const run = () => {
+    clearTimeout(runTimer);
+    clearLog();
+    void Dev.runHTML(withBridge(code.html)).then((url) => {
+      // A new frame each time: WebView2 shows an error page for a sandboxed
+      // frame sent from one devrun page to another.
+      const f = frame.cloneNode() as HTMLIFrameElement;
+      f.src = url;
+      frame.replaceWith(f);
+      frame = f;
+    }, showError);
+  };
+  off(() => {
+    clearTimeout(runTimer);
+    if (saveTimer) save();
+  });
+
+  el.addEventListener("input", () => {
+    code.html = el.value;
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(save, 400);
+    if (code.auto) {
+      clearTimeout(runTimer);
+      runTimer = window.setTimeout(run, 800);
+    }
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      return run();
+    }
+    if (e.isComposing) return;
+    const a = el.selectionStart;
+    const lineStart = el.value.lastIndexOf("\n", a - 1) + 1;
+    // insertText keeps Ctrl+Z working.
+    if (e.key === "Tab" && !e.shiftKey && a === el.selectionEnd) {
+      e.preventDefault();
+      document.execCommand("insertText", false, "  ");
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      // A new line as indented as the one it breaks, and one more after
+      // an opening bracket.
+      const indent = el.value.slice(lineStart, a).match(/^[ \t]*/)![0];
+      const more = /[{[(]\s*$/.test(el.value.slice(lineStart, a)) ? "  " : "";
+      if (!indent && !more) return;
+      e.preventDefault();
+      document.execCommand("insertText", false, "\n" + indent + more);
+    }
+  });
+
+  box.addEventListener("click", (e) => {
+    const what = (e.target as HTMLElement).closest<HTMLElement>("[data-do]")?.dataset.do;
+    if (what === "run") run();
+    else if (what === "clear-log") clearLog();
+    else if (what === "copy-code") code.html && copy(code.html);
+    else if (what === "sample" || what === "clear-code") {
+      const was = code.html;
+      const set = (html: string) => {
+        el.value = code.html = html;
+        save();
+        run();
+      };
+      set(what === "sample" ? sample : "");
+      toast(what === "sample" ? "已换成示例" : "已清空", { label: "撤销", run: () => set(was) });
+    }
+  });
+  auto.addEventListener("change", () => {
+    code.auto = auto.checked;
+    save();
+  });
+
+  run();
 }

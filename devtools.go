@@ -8,8 +8,10 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,14 +33,58 @@ type DevQRResult struct {
 	Error string   `json:"error,omitempty"`
 }
 
-// Dev is the developer's small tools that need Go: QR codes, and saving or
-// copying a picture. The rest, as JSON, timestamps and the calculator, is
-// the page's own.
+// Dev is the developer's small tools that need Go: QR codes, saving or
+// copying a picture, and serving the pages the HTML tab runs. The rest, as
+// JSON, timestamps and the calculator, is the page's own.
 type Dev struct {
-	mu   sync.Mutex
-	last *DevQRResult // a screen's QR code the page has not shown yet
-	open func()       // shows the tool's page
-	shot *Shot
+	mu    sync.Mutex
+	last  *DevQRResult // a screen's QR code the page has not shown yet
+	open  func()       // shows the tool's page
+	shot  *Shot
+	runs  map[string]string // the pages RunHTML serves, by id
+	runID int
+}
+
+const (
+	devRunScheme = "devrun"
+	devRunURL    = "http://devrun.localhost/"
+	// keepRuns is how many pages stay served: a frame may still be loading
+	// the one before.
+	keepRuns = 3
+)
+
+// RunHTML serves a page of the HTML tab under a new address, which its
+// preview frame loads. A frame of the app's own page could not run it: it
+// takes the page's CSP, which runs no inline script.
+func (d *Dev) RunHTML(doc string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.runs == nil {
+		d.runs = map[string]string{}
+	}
+	d.runID++
+	d.runs[strconv.Itoa(d.runID)] = doc
+	delete(d.runs, strconv.Itoa(d.runID-keepRuns))
+	return devRunURL + strconv.Itoa(d.runID)
+}
+
+// serve registers the devrun scheme; call it before any window is made.
+func (d *Dev) serve() {
+	mygo.Protocol.HandleFunc(devRunScheme, func(w http.ResponseWriter, r *http.Request) {
+		d.mu.Lock()
+		doc, ok := d.runs[strings.TrimPrefix(r.URL.Path, "/")]
+		d.mu.Unlock()
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		// Sandboxed even when not in the tab's frame: a page of its own
+		// origin, which cannot reach the app or call Go.
+		w.Header().Set("Content-Security-Policy", "sandbox allow-scripts allow-modals allow-forms")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write([]byte(doc))
+	})
 }
 
 // QR makes a QR code of a text: a PNG in base64.
