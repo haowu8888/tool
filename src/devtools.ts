@@ -1,14 +1,14 @@
 // The developer's small tools: JSON (as a folding tree), timestamps, a
 // calculator, QR codes (made, or read from a picture or the screen), UUIDs
-// and passwords, and running HTML.
+// and passwords, running HTML, and the price of gold.
 import { onFileDrop } from "mygo-runtime";
 import { icons } from "./icons";
 import { calc, calcFunctions, show as showNum, tidy } from "./calc";
-import { Dev, Notes, events, type DevQRResult } from "./mygo";
+import { Dev, Notes, events, type DevQRResult, type GoldChart, type GoldQuotes } from "./mygo";
 import { ago } from "./services";
 import { errorText, esc, onLeave, showError, toast } from "./ui";
 
-type Tab = "json" | "time" | "calc" | "qr" | "gen" | "html";
+type Tab = "json" | "time" | "calc" | "qr" | "gen" | "html" | "gold";
 const tabs: [Tab, string][] = [
   ["json", "JSON"],
   ["time", "时间戳"],
@@ -16,6 +16,7 @@ const tabs: [Tab, string][] = [
   ["qr", "二维码"],
   ["gen", "UUID / 密码"],
   ["html", "HTML 运行"],
+  ["gold", "金价"],
 ];
 const tabKey = "dev-tab";
 
@@ -55,7 +56,7 @@ export const devTool = {
       p.querySelectorAll<HTMLElement>(".dv-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
       for (const fn of leaveTab.splice(0)) fn();
       const off = (fn: () => void) => leaveTab.push(fn);
-      ({ json: renderJSON, time: renderTime, calc: renderCalc, qr: renderQR, gen: renderGen, html: renderHTML })[t](body, off);
+      ({ json: renderJSON, time: renderTime, calc: renderCalc, qr: renderQR, gen: renderGen, html: renderHTML, gold: renderGold })[t](body, off);
     };
     p.querySelectorAll<HTMLElement>(".dv-tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab as Tab)));
     onLeave(() => {
@@ -1022,4 +1023,207 @@ function renderHTML(box: HTMLElement, off: (fn: () => void) => void) {
   });
 
   run();
+}
+
+// ---- Gold ----
+
+// Prices from Sina finance (Dev.Gold), got again every 30 seconds while the
+// tab shows, and London gold's chart over a span (Dev.GoldChart).
+const ounce = 31.1034768; // grams
+type Span = "day" | "month" | "quarter" | "year" | "5y";
+const spans: [Span, string][] = [
+  ["day", "今日"],
+  ["month", "1 月"],
+  ["quarter", "3 月"],
+  ["year", "1 年"],
+  ["5y", "5 年"],
+];
+const spanKey = "dev-gold-span";
+const unitKey = "dev-gold-unit";
+// The last prices, shown at once when the tab is opened again.
+let lastGold: { q: GoldQuotes; at: number } | null = null;
+
+function loadPref<T extends string>(key: string, ok: readonly T[], def: T): T {
+  try {
+    const v = localStorage.getItem(key) as T;
+    if (ok.includes(v)) return v;
+  } catch {}
+  return def;
+}
+
+function savePref(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {}
+}
+
+const fix = (v: number, d = 2) => v.toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d });
+// Up is red and down green, as Chinese markets show it.
+const trend = (d: number) => (d > 0 ? "dv-up" : d < 0 ? "dv-down" : "");
+const signed = (v: number, d = 2) => (v > 0 ? "+" : "") + fix(v, d);
+
+function renderGold(box: HTMLElement, off: (fn: () => void) => void) {
+  box.innerHTML = `
+    <div class="dv-bar"><b>实时金价</b><span class="muted dv-g-at"></span><span class="l-spacer"></span><span class="muted dv-g-fx"></span><button data-do="gold-refresh">刷新</button></div>
+    <div class="dv-g-cards"></div>
+    <div class="dv-bar dv-g-head"><b>伦敦金走势</b><span class="muted dv-g-range"></span><span class="l-spacer"></span>
+      <div class="s-seg dv-g-unit"><button data-unit="usd">美元/盎司</button><button data-unit="cny">元/克</button></div>
+      <div class="s-seg dv-g-spans">${spans.map(([id, name]) => `<button data-span="${id}">${name}</button>`).join("")}</div></div>
+    <div class="dv-g-chart"><div class="muted dv-g-empty">正在加载…</div></div>
+    <p class="muted dv-tip">行情来自新浪财经，国际金价有几秒到几十秒的延迟；国内金店的首饰价一般比上金所 Au99.99 高几十到一百多元/克。元/克走势按当前汇率折算。</p>`;
+  const q = <T extends HTMLElement>(s: string) => box.querySelector<T>(s)!;
+  const cards = q(".dv-g-cards");
+  const chartEl = q(".dv-g-chart");
+  let span = loadPref<Span>(spanKey, spans.map(([id]) => id), "day");
+  let unit = loadPref(unitKey, ["usd", "cny"] as const, "cny");
+  let chart: GoldChart | null = null;
+  let gone = false;
+  off(() => (gone = true));
+
+  const rate = () => lastGold?.q.usdcny || 0;
+  const showQuotes = () => {
+    if (!lastGold) return;
+    const { q: g, at } = lastGold;
+    q(".dv-g-at").textContent = `· ${ago(at)}更新`;
+    q(".dv-g-fx").textContent = g.usdcny ? `美元/人民币 ${g.usdcny.toFixed(4)}` : "";
+    cards.innerHTML = g.quotes
+      .map((x) => {
+        const d = x.price - x.prev;
+        const pct = x.prev ? (d / x.prev) * 100 : 0;
+        const usd = x.unit.startsWith("美元");
+        const gram = usd && g.usdcny ? `<div class="dv-g-sub muted">≈ ¥${fix((x.price * g.usdcny) / ounce)}/克</div>` : "";
+        return `<div class="s-card dv-g-card">
+          <div class="dv-g-name">${esc(x.name)}<span class="muted">${esc(x.unit)}</span></div>
+          <div class="dv-g-price ${trend(d)}" title="点击复制">${fix(x.price, usd && x.price < 100 ? 3 : 2)}</div>
+          <div class="dv-g-chg ${trend(d)}">${signed(d)}　${signed(pct)}%</div>${gram}
+          <div class="dv-g-hl muted"><span>开 ${fix(x.open)}</span><span>高 ${fix(x.high)}</span><span>低 ${fix(x.low)}</span><span>昨收 ${fix(x.prev)}</span></div>
+          <div class="dv-g-time muted">${esc(x.time.slice(5, 16))}</div>
+        </div>`;
+      })
+      .join("");
+  };
+  const refresh = async (by = false) => {
+    try {
+      const g = await Dev.gold();
+      if (gone) return;
+      lastGold = { q: g, at: Date.now() };
+      showQuotes();
+      // The chart's last point moves with the price.
+      if (span === "day" && chart) void loadChart();
+      else drawChart();
+    } catch (e) {
+      if (gone) return;
+      if (by) showError(e);
+      q(".dv-g-at").innerHTML = `· <span class="dv-bad">${esc(errorText(e))}</span>`;
+    }
+  };
+
+  // drawChart draws the chart as an SVG line stretched to the box, its
+  // labels and the hover's readout laid over it in HTML.
+  const drawChart = () => {
+    if (!chart) return;
+    if (unit === "cny" && !rate()) unit = "usd";
+    const k = unit === "cny" ? rate() / ounce : 1;
+    const pts = chart.points.map((p) => ({ t: p.t, v: p.v * k }));
+    box.querySelectorAll<HTMLElement>(".dv-g-unit button").forEach((b) => b.classList.toggle("on", b.dataset.unit === unit));
+    if (pts.length < 2) {
+      chartEl.innerHTML = `<div class="muted dv-g-empty">${span === "day" ? "今天还没开盘" : "没有数据"}</div>`;
+      q(".dv-g-range").textContent = "";
+      return;
+    }
+    const base = span === "day" && chart.prev ? chart.prev * k : pts[0]!.v;
+    const last = pts[pts.length - 1]!.v;
+    const vs = pts.map((p) => p.v).concat(span === "day" && chart.prev ? [base] : []);
+    let lo = Math.min(...vs);
+    let hi = Math.max(...vs);
+    const padY = (hi - lo) * 0.08 || 1;
+    lo -= padY;
+    hi += padY;
+    const W = 1000;
+    const H = 240;
+    const x = (i: number) => (i / (pts.length - 1)) * W;
+    const y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
+    const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+    const cls = trend(last - base) || "dv-flat";
+    const d = last - base;
+    q(".dv-g-range").textContent = `${pts[0]!.t} – ${pts[pts.length - 1]!.t}　${signed(d)}（${signed((d / base) * 100)}%）`;
+    const maxI = pts.findIndex((p) => p.v === Math.max(...pts.map((p) => p.v)));
+    const minI = pts.findIndex((p) => p.v === Math.min(...pts.map((p) => p.v)));
+    const mark = (i: number, label: string, below: boolean) =>
+      `<span class="dv-g-mark" style="left:${(x(i) / W) * 100}%;top:${(y(pts[i]!.v) / H) * 100}%;transform:translate(${i > pts.length / 2 ? "-100%" : "0"},${below ? "4px" : "calc(-100% - 4px)"})">${label} ${fix(pts[i]!.v)}</span>`;
+    chartEl.innerHTML = `
+      <svg class="${cls}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <polygon class="dv-g-area" points="0,${H} ${line} ${W},${H}" />
+        ${span === "day" && chart.prev ? `<line class="dv-g-base" x1="0" x2="${W}" y1="${y(base)}" y2="${y(base)}" />` : ""}
+        <polyline class="dv-g-line" points="${line}" />
+        <line class="dv-g-cursor" x1="0" x2="0" y1="0" y2="${H}" />
+      </svg>
+      ${mark(maxI, "高", false)}${mark(minI, "低", true)}
+      <span class="dv-g-axis dv-g-hi">${fix(hi)}</span><span class="dv-g-axis dv-g-lo">${fix(lo)}</span>
+      <div class="dv-g-tip"></div>`;
+    const svg = chartEl.querySelector("svg")!;
+    const cursor = chartEl.querySelector<SVGLineElement>(".dv-g-cursor")!;
+    const tip = chartEl.querySelector<HTMLElement>(".dv-g-tip")!;
+    svg.addEventListener("mousemove", (e) => {
+      const r = svg.getBoundingClientRect();
+      const i = Math.round(((e.clientX - r.left) / r.width) * (pts.length - 1));
+      const p = pts[Math.min(Math.max(i, 0), pts.length - 1)]!;
+      const at = x(pts.indexOf(p));
+      cursor.setAttribute("x1", String(at));
+      cursor.setAttribute("x2", String(at));
+      cursor.style.display = "block";
+      const dd = p.v - base;
+      tip.innerHTML = `${esc(p.t)}　<b>${fix(p.v)}</b>　<span class="${trend(dd)}">${signed(dd)}（${signed((dd / base) * 100)}%）</span>`;
+      tip.style.display = "block";
+      tip.style.left = `${(at / W) * 100}%`;
+      tip.style.transform = `translateX(${at > W / 2 ? "calc(-100% - 8px)" : "8px"})`;
+    });
+    svg.addEventListener("mouseleave", () => {
+      cursor.style.display = tip.style.display = "none";
+    });
+  };
+  let loading = 0;
+  const loadChart = async () => {
+    const n = ++loading;
+    box.querySelectorAll<HTMLElement>(".dv-g-spans button").forEach((b) => b.classList.toggle("on", b.dataset.span === span));
+    try {
+      const c = await Dev.goldChart(span);
+      if (gone || n !== loading) return;
+      chart = c;
+      // Today's last minute may lag the quote: the price now ends it.
+      const now = lastGold?.q.quotes.find((x) => x.code === "hf_XAU");
+      if (span === "day" && now && chart.points.length) chart.points[chart.points.length - 1]!.v = now.price;
+      drawChart();
+    } catch (e) {
+      if (gone || n !== loading) return;
+      chartEl.innerHTML = `<div class="dv-g-empty dv-bad">${esc(errorText(e))}</div>`;
+    }
+  };
+
+  cards.addEventListener("click", (e) => {
+    const p = (e.target as HTMLElement).closest(".dv-g-price");
+    if (p) copy(p.textContent!.replace(/,/g, ""), `已复制 ${p.textContent}`);
+  });
+  box.addEventListener("click", (e) => {
+    const t = (e.target as HTMLElement).closest<HTMLElement>("[data-do], [data-span], [data-unit]");
+    if (!t) return;
+    if (t.dataset.do === "gold-refresh") void refresh(true).then(() => {
+        if (span !== "day") void loadChart();
+      });
+    else if (t.dataset.span) {
+      span = t.dataset.span as Span;
+      savePref(spanKey, span);
+      void loadChart();
+    } else if (t.dataset.unit) {
+      unit = t.dataset.unit as typeof unit;
+      savePref(unitKey, unit);
+      drawChart();
+    }
+  });
+
+  showQuotes();
+  void refresh().then(loadChart);
+  // Not while the window is hidden in the tray.
+  const timer = setInterval(() => !document.hidden && void refresh(), 30_000);
+  off(() => clearInterval(timer));
 }

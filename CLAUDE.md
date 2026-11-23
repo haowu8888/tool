@@ -19,7 +19,7 @@
 | `clips*.go` + `src/clips.ts` | 剪贴板历史和 Ctrl+Alt+V 小窗 | [docs/clips.md](docs/clips.md) |
 | `services*.go` + `src/services.ts` | 服务监控、Tailscale | [docs/services.md](docs/services.md) |
 | `flow.go` + `src/flow.ts` | Flow 流水线 | [docs/flow.md](docs/flow.md) |
-| `devtools.go` + `src/devtools.ts` + `src/calc.ts` | 开发工具 | [docs/devtools.md](docs/devtools.md) |
+| `devtools.go` + `devgold.go` + `src/devtools.ts` + `src/calc.ts` | 开发工具（含金价） | [docs/devtools.md](docs/devtools.md) |
 | `monitor*.go` + `ports*.go` + `overlay.go` + `src/monitor.ts`/`overlay.ts` | 系统监控、端口占用、监控悬浮窗 | [docs/monitor.md](docs/monitor.md) |
 | `widget*.go` + `petchat.go` + `src/widget.ts`/`pets.ts`/`petchat.ts` | 悬浮球（桌宠）和聊天小窗 | [docs/widget.md](docs/widget.md) |
 

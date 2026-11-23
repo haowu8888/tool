@@ -437,6 +437,48 @@ export interface GPUSample {
   clock: number;
 }
 
+/**
+ * GoldChart is London gold's price over a span, with the close before
+ * today's for today's chart.
+ */
+export interface GoldChart {
+  points: GoldPoint[];
+  prev?: number;
+}
+
+/**
+ * GoldPoint is a point of a chart: a time (15:04 for today's, a date for
+ * the rest) and a price.
+ */
+export interface GoldPoint {
+  t: string;
+  v: number;
+}
+
+/** GoldQuote is a market's price, as Sina quotes it. */
+export interface GoldQuote {
+  code: string;
+  name: string;
+  unit: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  /** the close before */
+  prev: number;
+  /** as 2026-11-23 09:46:00, the market's own */
+  time: string;
+}
+
+/**
+ * GoldQuotes is the gold tab's prices, and the dollar in yuan to turn an
+ * ounce's dollars into a gram's yuan.
+ */
+export interface GoldQuotes {
+  quotes: GoldQuote[];
+  usdcny: number;
+}
+
 /** InstalledApp is an app found on the computer, which the user may add. */
 export interface InstalledApp {
   name: string;
@@ -1965,6 +2007,17 @@ export const Dev = {
   /** DecodeQRFile reads the QR codes of a picture file, as dropped. */
   decodeQRFile(path: string): Promise<DevQRResult> {
     return call("Dev.DecodeQRFile", path);
+  },
+  /** Gold gets the prices of gold (and silver) now. */
+  gold(): Promise<GoldQuotes> {
+    return call("Dev.Gold");
+  },
+  /**
+   * GoldChart gets London gold's price over a span: day (by the minute),
+   * or month, quarter, year, or five years (by the day).
+   */
+  goldChart(span: string): Promise<GoldChart> {
+    return call("Dev.GoldChart", span);
   },
   /** QR makes a QR code of a text: a PNG in base64. */
   qr(text: string, size: number): Promise<string> {
