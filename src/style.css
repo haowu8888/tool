@@ -6518,19 +6518,25 @@ a.fl-out-v:hover {
   pointer-events: none;
 }
 
+/* 正在输入的文字：内边距是拖动它的边（marks.ts 的 styleTextBox 设内外边距） */
 .ie-text {
   position: absolute;
   z-index: 2;
   min-width: 40px;
-  margin: 0;
-  padding: 0;
   border: 1px dashed var(--accent);
-  background: transparent;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
   outline: none;
   resize: none;
   overflow: hidden;
   white-space: pre;
   field-sizing: content;
+}
+
+.ie-text::placeholder {
+  color: currentColor;
+  opacity: 0.5;
 }
 
 .ie-empty {

@@ -239,8 +239,6 @@ html.shot #app {
 .sh-text {
   position: absolute;
   min-width: 2em;
-  margin: -1px 0 0 -3px;
-  padding: 0 2px;
   border: 1px dashed currentColor;
   outline: none;
   background: transparent;
@@ -249,6 +247,11 @@ html.shot #app {
   white-space: pre;
   field-sizing: content;
   cursor: text;
+}
+
+.sh-text::placeholder {
+  color: currentColor;
+  opacity: 0.5;
 }
 
 /* 长截图：框住区域的边框（鼠标穿透），和旁边的面板 */

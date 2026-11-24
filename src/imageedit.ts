@@ -9,7 +9,7 @@
 import { onFileDrop } from "mygo-runtime";
 import { editIcons, icons, markIcons } from "./icons";
 import { ImageEdit, Settings, Shot, events, type EditImage } from "./mygo";
-import { dragMark, newMark, paintMarks, pen, sizeOf, slip, styleTextBox, textBox, textLine, tools as markTools, type Mark, type Pt, type Rect, type Tool as MarkTool } from "./marks";
+import { dragMark, newMark, paintMarks, pen, sizeOf, slip, styleTextBox, textBox, textBounds, textLine, tools as markTools, type Mark, type Pt, type Rect, type Tool as MarkTool } from "./marks";
 import { backgrounds, base64, bgCSS, canvas, copyCanvas, decode, decodeBlob, encodeCanvas, exportDialog, fillBackground, imagePath, maxPixels, mosaicBlock, pastedPicture, penEvent, penHTML, pixelated, roundRect, showPen, stamp } from "./imgutil";
 import { renderCollage } from "./collage";
 import { borderColor, cutout, opaqueBox, type Pixels } from "./cutout";
@@ -54,7 +54,9 @@ type Op =
   | { kind: "flip"; h: boolean }
   | { kind: "resize"; w: number; h: number }
   | { kind: "adjust"; a: Adjust }
-  | { kind: "mark"; mark: Mark }
+  // A text edited again (replaces, the index of its mark) is painted
+  // here instead.
+  | { kind: "mark"; mark: Mark; replaces?: number }
   | { kind: "frame"; f: Frame }
   // 去背景's result: what it made of the picture before it, which a replay
   // gives again the same.
@@ -297,15 +299,26 @@ function framed(c: HTMLCanvasElement, f: Frame) {
   return out;
 }
 
-function replay(d: Doc) {
+// replay does the ops again from the original, but those replaced, and
+// the one being edited.
+function replay(d: Doc, editing?: number) {
+  const skip = new Set(d.ops.map((op) => (op.kind === "mark" ? op.replaces : undefined)));
+  skip.add(editing);
   let c = copyOf(d.orig);
-  for (const op of d.ops) c = apply(c, op);
+  d.ops.forEach((op, i) => {
+    if (!skip.has(i)) c = apply(c, op);
+  });
   d.cur = c;
   pickData = null;
 }
 
 function commit(op: Op) {
   if (!doc) return;
+  if (op.kind === "mark" && op.replaces !== undefined) {
+    doc.ops.push(op);
+    doc.redo = [];
+    return replay(doc);
+  }
   const c = apply(doc.cur === doc.orig ? copyOf(doc.cur) : doc.cur, op);
   doc.ops.push(op);
   doc.redo = [];
@@ -809,6 +822,7 @@ function drawOver() {
   const ctx = over.getContext("2d")!;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  placeText();
   if (!doc) return;
   // From the picture's pixels to the canvas's.
   const toOver = () => ctx.setTransform(z * dpr, 0, 0, z * dpr, tx * dpr, ty * dpr);
@@ -872,7 +886,9 @@ function drawOver() {
 let drawing: { mark: Mark; mosaic: HTMLCanvasElement | null } | null = null;
 let space = false;
 let pickData: ImageData | null = null;
-let text: { el: HTMLTextAreaElement; at: Pt; size: number; color: string } | null = null;
+// The text being typed: at and size in the picture's pixels; again, the
+// index of the mark it edits.
+let text: { el: HTMLTextAreaElement; at: Pt; size: number; color: string; again?: number } | null = null;
 
 function setSpace(on: boolean) {
   space = on;
@@ -922,7 +938,7 @@ function bindStage(stage: HTMLElement) {
     } else if (mode === "mark") {
       if (markTool === "text") {
         e.preventDefault();
-        openText(at, p);
+        openText(p);
         return;
       }
       const size = sizeOf(markTool, pen.size) / z;
@@ -1330,23 +1346,78 @@ async function removeWatermark() {
 
 // ---- Text, typed in a box over the stage ----
 
-function openText(at: Pt, p: Pt) {
-  const size = sizeOf("text", pen.size);
-  const el = textBox(stageBox()!, "ie-text", () => {
-    closeText(true);
+// openText opens a text box at a point of the picture: on a text that
+// can be edited again, that one.
+function openText(p: Pt) {
+  if (!doc) return;
+  const again = textAt(p);
+  const m = again === undefined ? null : (doc.ops[again] as Extract<Op, { kind: "mark" }>).mark as Extract<Mark, { kind: "text" }>;
+  const size = m?.size ?? sizeOf("text", pen.size) / z;
+  const el = textBox(
+    stageBox()!,
+    "ie-text",
+    () => {
+      closeText(true);
+      draw();
+    },
+    m?.text,
+    (dx, dy) => {
+      if (!text) return;
+      text.at = { x: text.at.x + dx / z, y: text.at.y + dy / z };
+      placeText();
+    },
+  );
+  text = { el, at: m ? { ...m.at } : { x: p.x, y: p.y - (size * textLine) / 2 }, size, color: m?.color ?? pen.color, again };
+  if (m) {
+    replay(doc, again);
     draw();
-  });
-  text = { el, at: { x: p.x, y: p.y - (size * textLine) / 2 / z }, size, color: pen.color };
-  styleTextBox(el, at.x, at.y - (size * textLine) / 2, pen.color, size);
+  }
+  placeText();
+}
+
+// textAt is the index of the topmost text mark at a point that can be
+// edited again: one after what changed the picture's shape or was kept
+// as a picture (去背景, 去水印).
+function textAt(p: Pt) {
+  if (!doc) return;
+  const replaced = new Set(doc.ops.map((op) => (op.kind === "mark" ? op.replaces : undefined)));
+  for (let i = doc.ops.length - 1; i >= 0; i--) {
+    const op = doc.ops[i]!;
+    if (op.kind !== "mark" && op.kind !== "adjust" && op.kind !== "censor") return;
+    if (op.kind !== "mark" || op.mark.kind !== "text" || replaced.has(i)) continue;
+    const b = textBounds(op.mark);
+    const pad = 4 / z;
+    if (p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad) return i;
+  }
+}
+
+// placeText puts the text box over its place in the picture, as zoomed.
+function placeText() {
+  if (text) styleTextBox(text.el, tx + text.at.x * z, ty + text.at.y * z, text.color, text.size * z);
+}
+
+// penToText gives the text being typed what the pen panel changed.
+function penToText(what: "size" | "color" | null, click: boolean) {
+  if (!text || !what) return;
+  if (what === "color") text.color = pen.color;
+  else text.size = sizeOf("text", pen.size) / z;
+  placeText();
+  // The color picker stays open while it gives colors.
+  if (click) text.el.focus();
 }
 
 function closeText(keep: boolean) {
   if (!text) return;
-  const { el, at, size, color } = text;
+  const { el, at, size, color, again } = text;
   text = null;
   const value = el.value.replace(/\s+$/, "");
   el.remove();
-  if (keep && value && doc) commit({ kind: "mark", mark: { kind: "text", at, text: value, color, size: size / z } });
+  if (!doc) return;
+  const old = again === undefined ? null : (doc.ops[again] as Extract<Op, { kind: "mark" }>).mark as Extract<Mark, { kind: "text" }>;
+  const same = old && old.text === value && old.color === color && old.size === size && old.at.x === at.x && old.at.y === at.y;
+  // Emptied, an edited text goes: it is replaced by nothing to paint.
+  if (keep && !same && (value || old)) commit({ kind: "mark", mark: { kind: "text", at, text: value, color, size }, replaces: again });
+  else if (old) replay(doc);
 }
 
 // ---- Picking a color ----
@@ -1487,7 +1558,7 @@ function sideHTML() {
         <h3>标注</h3>
         <div class="ie-icons ie-marks">${markTools.map(([t, n]) => `<button data-mark="${t}" title="${n}">${markIcons[t]}<span>${n}</span></button>`).join("")}</div>
         ${penHTML()}
-        <p class="muted ie-hint">按住 Shift 画正方形、圆或 45° 箭头；文字回车换行，Esc 或点别处完成。粗细按屏幕上看到的算，放大后画得更细。</p>`;
+        <p class="muted ie-hint">按住 Shift 画正方形、圆或 45° 箭头；文字回车换行，拖虚线框移动，输入时可改颜色和粗细，Esc 或点别处完成；用文字工具点已有的文字可重新编辑（裁剪旋转等之后的）。粗细按屏幕上看到的算，放大后画得更细。</p>`;
     case "frame":
       return `
         <h3>背景</h3>
@@ -1640,7 +1711,11 @@ function thumbSize(c: HTMLCanvasElement): [number, number] {
 function bindSide(side: HTMLElement) {
   side.addEventListener("click", (e) => {
     if (!doc) return;
-    if (penEvent(e)) return draw();
+    const pe = penEvent(e);
+    if (pe) {
+      penToText(pe, true);
+      return draw();
+    }
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>("button");
     if (!b) return;
@@ -1762,7 +1837,11 @@ function bindSide(side: HTMLElement) {
   });
   side.addEventListener("input", (e) => {
     if (!doc) return;
-    if (penEvent(e)) return draw();
+    const pe = penEvent(e);
+    if (pe) {
+      penToText(pe, false);
+      return draw();
+    }
     const i = e.target as HTMLInputElement;
     const d = doc;
     if (i.dataset.adj) {

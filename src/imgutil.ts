@@ -319,17 +319,20 @@ export function showPen(box: HTMLElement, tool: Tool) {
 }
 
 // penEvent changes the pen on a click or input in its panel, and tells
-// whether it did.
-export function penEvent(e: Event) {
+// what it changed, if it did.
+export function penEvent(e: Event): "size" | "color" | null {
   const t = e.target as HTMLElement;
   if (e.type === "input") {
-    if (!(t instanceof HTMLInputElement) || t.type !== "color" || !t.closest(".ie-custom")) return false;
+    if (!(t instanceof HTMLInputElement) || t.type !== "color" || !t.closest(".ie-custom")) return null;
     setPen({ color: t.value });
-    return true;
+    return "color";
   }
   const b = t.closest<HTMLElement>("[data-size], [data-color]");
-  if (!b) return false;
-  if (b.dataset.size) setPen({ size: Number(b.dataset.size) });
-  else setPen({ color: b.dataset.color! });
-  return true;
+  if (!b) return null;
+  if (b.dataset.size) {
+    setPen({ size: Number(b.dataset.size) });
+    return "size";
+  }
+  setPen({ color: b.dataset.color! });
+  return "color";
 }

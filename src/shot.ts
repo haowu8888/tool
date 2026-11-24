@@ -260,7 +260,11 @@ export function showShot(app: HTMLElement, display: number) {
   };
 
   const openEditor = (at: Pt) => {
-    const el = textBox(app, "sh-text", () => commitText());
+    const el = textBox(app, "sh-text", () => commitText(), "", (dx, dy) => {
+      if (!editing) return;
+      editing.at = { x: editing.at.x + dx, y: editing.at.y + dy };
+      styleEditor();
+    });
     editing = { el, at, color: pen.color, size: sizeOf("text", pen.size) };
     styleEditor();
     el.addEventListener("blur", () => commitText());

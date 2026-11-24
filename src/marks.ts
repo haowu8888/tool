@@ -102,15 +102,50 @@ export const slip = (m: Mark, min: number) => "a" in m && Math.abs(m.b.x - m.a.x
 
 // textBox is the box a text mark is typed in, over the picture, in a
 // parent: Esc or Ctrl+Enter ends it (done), Enter starts a new line, and
-// a click in it stays in it. It grows with its text (field-sizing).
-export function textBox(parent: HTMLElement, className: string, done: () => void, value = "") {
+// a click in it stays in it. It grows with its text (field-sizing). With
+// moved, its dashed edge drags it: moved gets each step, in the parent's
+// pixels, and puts it again (styleTextBox).
+export function textBox(parent: HTMLElement, className: string, done: () => void, value = "", moved?: (dx: number, dy: number) => void) {
   const el = document.createElement("textarea");
   el.className = className;
   el.spellcheck = false;
   el.rows = 1;
   el.value = value;
+  if (moved) el.placeholder = "输入文字，拖虚线框移动";
   parent.append(el);
-  el.addEventListener("pointerdown", (e) => e.stopPropagation());
+  // The edge is the padding round the text (styleTextBox).
+  const edge = (e: PointerEvent) => {
+    const r = el.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    return x < textPad.x + 1 || y < textPad.y + 1 || x > r.width - textPad.x - 1 || y > r.height - textPad.y - 1;
+  };
+  let from: Pt | null = null;
+  el.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    if (!moved || e.button !== 0 || !edge(e)) return;
+    e.preventDefault();
+    from = { x: e.clientX, y: e.clientY };
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {}
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!moved) return;
+    if (!from) {
+      el.style.cursor = edge(e) ? "move" : "";
+      return;
+    }
+    moved(e.clientX - from.x, e.clientY - from.y);
+    from = { x: e.clientX, y: e.clientY };
+  });
+  const drop = () => {
+    if (!from) return;
+    from = null;
+    el.focus();
+  };
+  el.addEventListener("pointerup", drop);
+  el.addEventListener("lostpointercapture", drop);
   el.addEventListener("keydown", (e) => {
     if (e.key === "Escape" || (e.key === "Enter" && e.ctrlKey)) {
       e.preventDefault();
@@ -122,10 +157,31 @@ export function textBox(parent: HTMLElement, className: string, done: () => void
   return el;
 }
 
-// styleTextBox puts a text box at a place of its parent, in a color and
-// a size in the parent's pixels.
+// textPad is the room round a text box's text, to drag it by (and the
+// dashed line).
+const textPad = { x: 7, y: 5 };
+
+// styleTextBox puts a text box's text at a place of its parent, in a
+// color and a size in the parent's pixels.
 export function styleTextBox(el: HTMLTextAreaElement, x: number, y: number, color: string, size: number) {
-  Object.assign(el.style, { left: `${x}px`, top: `${y}px`, color, font: textFont(size), lineHeight: String(textLine) });
+  Object.assign(el.style, {
+    left: `${x}px`,
+    top: `${y}px`,
+    color,
+    font: textFont(size),
+    lineHeight: String(textLine),
+    padding: `${textPad.y - 1}px ${textPad.x - 1}px`,
+    margin: `${-textPad.y}px 0 0 ${-textPad.x}px`,
+  });
+}
+
+// textBounds is where a text mark's text is, in its units, to click on.
+let measure: CanvasRenderingContext2D | null = null;
+export function textBounds(m: Extract<Mark, { kind: "text" }>): Rect {
+  measure ??= document.createElement("canvas").getContext("2d")!;
+  measure.font = textFont(m.size);
+  const lines = m.text.split("\n");
+  return { x: m.at.x, y: m.at.y, w: Math.max(...lines.map((l) => measure!.measureText(l).width)), h: lines.length * m.size * textLine };
 }
 
 // paintMarks draws marks on a canvas whose pixel (0, 0) is the marks'

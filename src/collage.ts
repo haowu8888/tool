@@ -219,6 +219,7 @@ function draw() {
   ox = (stage.clientWidth - state.w * k) / 2;
   oy = (stage.clientHeight - state.h * k) / 2;
   view.style.transform = `translate(${ox}px, ${oy}px) scale(${k})`;
+  placeText();
   drawOver();
   p.querySelector<HTMLButtonElement>('.cg-top [data-act="undo"]')!.disabled = !past.length;
   p.querySelector<HTMLButtonElement>('.cg-top [data-act="redo"]')!.disabled = !future.length;
@@ -599,6 +600,7 @@ function act(a: string) {
 let drawing: { mark: Mark; mosaic: HTMLCanvasElement | null } | null = null;
 let hoverLine: Line | null = null;
 let swapTo: string | null = null;
+// The text being typed, at and size in the collage's pixels.
 let text: { el: HTMLTextAreaElement; at: Pt; size: number; color: string } | null = null;
 
 function toCollage(e: { clientX: number; clientY: number }): Pt {
@@ -657,7 +659,7 @@ function bindStage(stage: HTMLElement) {
     if (tool !== "move") {
       if (tool === "text") {
         e.preventDefault();
-        openText(e, p);
+        openText(p);
         return;
       }
       const size = sizeOf(tool, pen.size) / k;
@@ -799,8 +801,7 @@ function bindStage(stage: HTMLElement) {
     if (tool !== "move" || l?.kind !== "mark" || l.mark.kind !== "text") return;
     const m = l.mark;
     change(() => (state.layers = state.layers.filter((x) => x.id !== l.id)));
-    const r = stage.getBoundingClientRect();
-    openText({ clientX: r.left + ox + m.at.x * k, clientY: r.top + oy + m.at.y * k + (m.size * k * textLine) / 2 }, { x: m.at.x, y: m.at.y + (m.size * textLine) / 2 }, m);
+    openText(m.at, m);
   });
 }
 
@@ -817,13 +818,11 @@ function zoomCell(l: Leaf, zoom: number) {
   render();
 }
 
-// openText opens a text box where the pointer is, at the point p of the
-// collage, or again on a text taken off to edit.
-function openText(e: { clientX: number; clientY: number }, p: Pt, again?: Extract<Mark, { kind: "text" }>) {
+// openText opens a text box at the point p of the collage, or again on
+// a text taken off to edit.
+function openText(p: Pt, again?: Extract<Mark, { kind: "text" }>) {
   const stage = page!.querySelector<HTMLElement>(".cg-stage")!;
-  const r = stage.getBoundingClientRect();
-  const size = again ? again.size * k : sizeOf("text", pen.size);
-  const color = again?.color ?? pen.color;
+  const size = again?.size ?? sizeOf("text", pen.size) / k;
   const el = textBox(
     stage,
     "ie-text",
@@ -832,9 +831,28 @@ function openText(e: { clientX: number; clientY: number }, p: Pt, again?: Extrac
       render();
     },
     again?.text,
+    (dx, dy) => {
+      if (!text) return;
+      text.at = { x: text.at.x + dx / k, y: text.at.y + dy / k };
+      placeText();
+    },
   );
-  text = { el, at: { x: p.x, y: p.y - (size * textLine) / 2 / k }, size, color };
-  styleTextBox(el, e.clientX - r.left, e.clientY - r.top - (size * textLine) / 2, color, size);
+  text = { el, at: again ? { ...again.at } : { x: p.x, y: p.y - (size * textLine) / 2 }, size, color: again?.color ?? pen.color };
+  placeText();
+}
+
+// placeText puts the text box over its place in the collage.
+function placeText() {
+  if (text) styleTextBox(text.el, ox + text.at.x * k, oy + text.at.y * k, text.color, text.size * k);
+}
+
+// penToText gives the text being typed what the pen panel changed.
+function penToText(what: "size" | "color" | null, click: boolean) {
+  if (!text || !what) return;
+  if (what === "color") text.color = pen.color;
+  else text.size = sizeOf("text", pen.size) / k;
+  placeText();
+  if (click) text.el.focus();
 }
 
 function closeText(keep: boolean) {
@@ -843,7 +861,7 @@ function closeText(keep: boolean) {
   text = null;
   const value = el.value.replace(/\s+$/, "");
   el.remove();
-  if (keep && value) change(() => state.layers.push({ id: uid(), kind: "mark", mark: { kind: "text", at, text: value, color, size: size / k } }));
+  if (keep && value) change(() => state.layers.push({ id: uid(), kind: "mark", mark: { kind: "text", at, text: value, color, size } }));
 }
 
 // ---- The side panel ----
@@ -1011,7 +1029,11 @@ function joinCell() {
 
 function bindSide(side: HTMLElement) {
   side.addEventListener("click", (e) => {
-    if (penEvent(e)) return render();
+    const pe = penEvent(e);
+    if (pe) {
+      penToText(pe, true);
+      return render();
+    }
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
     if (!b || b.disabled) {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-layer]");
@@ -1064,7 +1086,11 @@ function bindSide(side: HTMLElement) {
   let before = "";
   side.addEventListener("pointerdown", () => (before = snap()));
   side.addEventListener("input", (e) => {
-    if (penEvent(e)) return render();
+    const pe = penEvent(e);
+    if (pe) {
+      penToText(pe, false);
+      return render();
+    }
     const i = e.target as HTMLInputElement;
     if (i.dataset.st) {
       state[i.dataset.st as "gap"] = Number(i.value);
