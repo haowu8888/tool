@@ -24,6 +24,6 @@
 2026-11-23 加。`devgold.go`（方法挂在 `Dev` 上）+ `src/devtools.ts` 的 `renderGold`。行情从新浪财经取（不要密钥，国内直连；要带 `Referer: https://finance.sina.com.cn/`，否则 403）：
 
 - 报价 `Dev.Gold`：`https://hq.sinajs.cn/list=fx_susdcny,hf_XAU,gds_AU9999,gds_AUTD,hf_GC,hf_XAG`，每行 `var hq_str_<代码>="…";`。`hf_`/`gds_` 字段：0 现价、4 高、5 低、6 时间、7 昨收、8 开盘、12 日期；`fx_susdcny` 第 8 个是美元兑人民币。返回的名字是 GBK，不解析，用 `goldMarkets` 里自己的名字。开盘前现价是 0，用昨收
-- 走势 `Dev.GoldChart(span)`：今日是 `GlobalFuturesService.getGlobalFuturesMinLine?symbol=XAU`（每行倒数第 5 个是价格、最后一个是时间，第一行第 2 个是昨收，画成虚线）；1 月/3 月/1 年/5 年取 `getGlobalFuturesDailyKLine?symbol=XAU`（20 年日线约 0.7MB，Go 里缓存 10 分钟）按日期截
-- 页面：标签在时才每 30 秒刷新（窗口藏到托盘时 `document.hidden` 跳过），涨红跌绿；美元/盎司的卡片下面折算成元/克（÷31.1034768×汇率），走势可切美元/盎司、元/克（按当前汇率折算），选择记在 localStorage `dev-gold-span`、`dev-gold-unit`。点价格复制
+- 走势 `Dev.GoldChart(span)`：今日是 `GlobalFuturesService.getGlobalFuturesMinLine?symbol=XAU`（每行倒数第 5 个是价格、最后一个是时间，第一行第 2 个是昨收，画成虚线）；1 月/3 月/1 年/5 年取 `getGlobalFuturesDailyKLine?symbol=XAU`（20 年日线约 0.7MB，Go 里缓存 10 分钟）按日期截，`Prev` 是区间前一天的收盘（算第一天的涨跌）。日线最后一天是今天时用实时报价替换（日线的今日收盘比报价慢）
+- 页面：标签在时才每 30 秒刷新（窗口藏到托盘时 `document.hidden` 跳过），涨红跌绿；美元/盎司的卡片下面折算成元/克（÷31.1034768×汇率），走势可切美元/盎司、元/克（按当前汇率折算），选择记在 localStorage `dev-gold-span`、`dev-gold-unit`。点价格复制。走势悬停：今日显示比昨收的涨跌，1 月及更长显示当天比前一天收盘的涨跌额和比例（2026-11-25 按用户要求改，原来是相对区间第一天的累计涨跌）；标题旁是整段比区间前一天收盘的涨跌
 - 单测 `TestParseGold*`（`devgold_test.go`），CDP `.dev/js/dev-gold.js`（打开金价页，读卡片、今日/1 年走势、切单位）

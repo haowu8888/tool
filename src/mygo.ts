@@ -439,7 +439,7 @@ export interface GPUSample {
 
 /**
  * GoldChart is London gold's price over a span, with the close before
- * today's for today's chart.
+ * its first point.
  */
 export interface GoldChart {
   points: GoldPoint[];

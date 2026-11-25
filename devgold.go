@@ -40,7 +40,7 @@ type GoldPoint struct {
 }
 
 // GoldChart is London gold's price over a span, with the close before
-// today's for today's chart.
+// its first point.
 type GoldChart struct {
 	Points []GoldPoint `json:"points"`
 	Prev   float64     `json:"prev,omitempty"`
@@ -180,7 +180,12 @@ func (d *Dev) GoldChart(span string) (GoldChart, error) {
 	for i > 0 && all[i-1].T >= from {
 		i--
 	}
-	return GoldChart{Points: all[i:]}, nil
+	out := GoldChart{Points: all[i:]}
+	// The close before the span gives its first day's change.
+	if i > 0 {
+		out.Prev = all[i-1].V
+	}
+	return out, nil
 }
 
 // jsonpBody is what is inside var t=(…); of a JSONP answer.

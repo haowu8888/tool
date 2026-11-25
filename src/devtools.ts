@@ -1110,7 +1110,10 @@ function renderGold(box: HTMLElement, off: (fn: () => void) => void) {
       showQuotes();
       // The chart's last point moves with the price.
       if (span === "day" && chart) void loadChart();
-      else drawChart();
+      else {
+        liveEnd();
+        drawChart();
+      }
     } catch (e) {
       if (gone) return;
       if (by) showError(e);
@@ -1131,7 +1134,10 @@ function renderGold(box: HTMLElement, off: (fn: () => void) => void) {
       q(".dv-g-range").textContent = "";
       return;
     }
-    const base = span === "day" && chart.prev ? chart.prev * k : pts[0]!.v;
+    // The close before: yesterday's for today, the day before the span's
+    // first for the days.
+    const prev = chart.prev ? chart.prev * k : 0;
+    const base = prev || pts[0]!.v;
     const last = pts[pts.length - 1]!.v;
     const vs = pts.map((p) => p.v).concat(span === "day" && chart.prev ? [base] : []);
     let lo = Math.min(...vs);
@@ -1172,8 +1178,11 @@ function renderGold(box: HTMLElement, off: (fn: () => void) => void) {
       cursor.setAttribute("x1", String(at));
       cursor.setAttribute("x2", String(at));
       cursor.style.display = "block";
-      const dd = p.v - base;
-      tip.innerHTML = `${esc(p.t)}　<b>${fix(p.v)}</b>　<span class="${trend(dd)}">${signed(dd)}（${signed((dd / base) * 100)}%）</span>`;
+      // A day's change is from the day before; a minute's from yesterday.
+      const j = pts.indexOf(p);
+      const from = span === "day" ? base : j ? pts[j - 1]!.v : prev;
+      const dd = from ? p.v - from : 0;
+      tip.innerHTML = `${esc(p.t)}　<b>${fix(p.v)}</b>　<span class="${trend(dd)}">${signed(dd)}（${signed(from ? (dd / from) * 100 : 0)}%）</span>`;
       tip.style.display = "block";
       tip.style.left = `${(at / W) * 100}%`;
       tip.style.transform = `translateX(${at > W / 2 ? "calc(-100% - 8px)" : "8px"})`;
@@ -1181,6 +1190,13 @@ function renderGold(box: HTMLElement, off: (fn: () => void) => void) {
     svg.addEventListener("mouseleave", () => {
       cursor.style.display = tip.style.display = "none";
     });
+  };
+  // Today's last minute, or today's close in the days, may lag the quote:
+  // the price now ends the chart.
+  const liveEnd = () => {
+    const now = lastGold?.q.quotes.find((x) => x.code === "hf_XAU");
+    const end = chart?.points[chart.points.length - 1];
+    if (now && end && (span === "day" || end.t === now.time.slice(0, 10))) end.v = now.price;
   };
   let loading = 0;
   const loadChart = async () => {
@@ -1190,9 +1206,7 @@ function renderGold(box: HTMLElement, off: (fn: () => void) => void) {
       const c = await Dev.goldChart(span);
       if (gone || n !== loading) return;
       chart = c;
-      // Today's last minute may lag the quote: the price now ends it.
-      const now = lastGold?.q.quotes.find((x) => x.code === "hf_XAU");
-      if (span === "day" && now && chart.points.length) chart.points[chart.points.length - 1]!.v = now.price;
+      liveEnd();
       drawChart();
     } catch (e) {
       if (gone || n !== loading) return;
